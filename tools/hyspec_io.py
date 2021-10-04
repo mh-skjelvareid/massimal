@@ -4,25 +4,25 @@ import numpy as np
 
 #%%
 def load_envi_image(header_filename,image_filename=None):
-    """ Function for "full" tile augmentation (all combinations)
+    """ Load image in ENVI format, with wavelenghts and RGB indices
 
     # Usage:
-        (im_cube,wl,rgb_ind,metadata) = load_envi_image(header_filename,...)
+    (im_cube,wl,rgb_ind,metadata) = load_envi_image(header_filename,...)
 
     # Required arguments:
-        header_filename: Path to ENVI file header.
+    header_filename: Path to ENVI file header.
 
     # Optional arguments:
-        image_filename: Path to ENVI data file, useful if data file is not found
-                        automatically
+    image_filename: Path to ENVI data file, useful if data file is not found
+                    automatically.
 
     Returns:
-        im_cube:    Full image
-        wl:         Wavelength vector
-        rgb_ind:    3-element tuple with indices to default RGB bands,
-                    [640,550,460] nm
-        metadata:   Image metadata (dictionary). Can be used as input to
-                    spectral.io.envi.save_image()
+    im_cube:    Full image
+    wl:         Wavelength vector
+    rgb_ind:    3-element tuple with indices to default RGB bands,
+                [640,550,460] nm
+    metadata:   Image metadata (dictionary). Can be used as input to
+                spectral.io.envi.save_image()
 
     The function uses spectral.io.envi.open() to read the file, and has the same
     input arguments.
