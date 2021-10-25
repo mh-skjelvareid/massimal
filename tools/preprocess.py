@@ -87,7 +87,38 @@ def inpaint_masked(in_im, mask, inpaint_radius=3, inpaint_alg = 'ns'):
 
     # Loop over each image band and apply inpainting
     for ii in range(out_im.shape[2]):
+        print('Inpaiting band ' + str(ii) + ' of ' + str(out_im.shape[2]),end="\r")
         out_im[:,:,ii] = cv2.inpaint( out_im[:,:,ii],mask,inpaint_radius,alg_flag)
 
     # Return
     return out_im
+
+
+def remove_glint_flatspec(image,wl,nir_band=(780,840)):
+    """ Remove sun/sky glint assuming flat glint spectrum
+
+    # Usage:
+    image_noglint = remove_glint_flatspec(image,wl,...)
+
+    # Required arguments:
+    in_im:  3D numpy array with hyperspectral image, wavelengths along 3rd dim.
+    wl:     1D array of wavelenghs (numeric)
+
+    # Optional arguments:
+    nir_band:   2-element tuple with upper and lower limit of NIR band
+                The average value of the NIR band is subtracted from the
+                original image.
+
+    # Returns:
+    image_noglint:  Hyperspectral image with estimated glint subtracted.
+
+    """
+
+    # Calculated wavelength indices of NIR band
+    nir_ind = (wl > nir_band[0]) & (wl < nir_band[1])
+
+    # Subtract average NIR value from all of image.
+    mean_nir = np.mean(image[:,:,nir_ind], axis=2, keepdims=True)
+    image_noglint = image - mean_nir
+
+    return image_noglint

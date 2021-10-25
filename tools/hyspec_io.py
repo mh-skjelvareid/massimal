@@ -2,7 +2,7 @@
 import spectral
 import numpy as np
 
-#%%
+#%% load_envi_image
 def load_envi_image(header_filename,image_filename=None):
     """ Load image in ENVI format, with wavelenghts and RGB indices
 
