@@ -1,6 +1,7 @@
 
 import glob
 import os
+import shutil
 
 def file_pattern_search(root_dir, file_pattern, recursive = False):
     """ Find all files matching pattern inside a "root" directory
@@ -55,7 +56,7 @@ def build_newdir_filepath(file_paths,new_dir,new_ext = None):
                 If given, the old file name extension will be replaced with this.
 
     # Returns:
-    new_file_paths:  New file path(s) (single or list).
+    new_file_paths:  New file path(s) (list).
 
     # Notes:
     """
@@ -71,3 +72,34 @@ def build_newdir_filepath(file_paths,new_dir,new_ext = None):
     new_file_paths = [os.path.normpath(new_dir + os.path.sep + name) for name in file_names]
 
     return new_file_paths
+
+
+def copy_hyspec_aux_files(hdr_file,dest_dir,copy_lcf = True,copy_times=True):
+    """ Copy auxillary files related to hyperspectral (ENVI) image files
+
+    # Required arguments:
+    hdr_file:   Path to header file (part of ENVI image)
+    dest_dir:   Path to destination directory
+
+    # Optional arguments:
+    copy_lcf:   Do copy .lcf file (boolean)
+    copy_times: Do copy .times file (boolean)
+
+    # Notes:
+    The function assumes the following naming convention:
+    Binary data file:   <base name>.bip
+    Header file:        <base name>.bip.hdr
+    LCF file:           <base name>.lcf
+    Times file:         <base name>.bip.times
+    """
+
+    base_name = os.path.join(os.path.dirname(hdr_file),
+                    os.path.basename(hdr_file).split(sep='.')[0])
+
+    lcf_path = base_name + '.lcf'
+    if copy_lcf and os.path.exists(lcf_path):
+        shutil.copy(lcf_path,dest_dir)
+
+    times_path = base_name + '.bip.times'
+    if copy_times and os.path.exists(times_path):
+        shutil.copy(times_path,dest_dir)

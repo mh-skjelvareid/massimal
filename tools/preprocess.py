@@ -4,6 +4,11 @@
 import cv2
 import numpy as np
 from sklearn.linear_model import LinearRegression
+import hyspec_io
+import misc
+import os
+import spectral
+
 
 # detect_saturated
 def detect_saturated(image,sat_val=2**12-1,src_ax=2):
@@ -26,7 +31,6 @@ def detect_saturated(image,sat_val=2**12-1,src_ax=2):
     """
 
     mask = np.any( np.atleast_3d(image) >= sat_val, axis = src_ax)
-
     return mask
 
 
@@ -56,7 +60,7 @@ def inpaint_masked(in_im, mask, inpaint_radius=3, inpaint_alg = 'ns'):
     # Notes:
     This is a wrapper function for the inpainting algorithms in OpenCV. These
     only have support for 1- or 3-band images. The main contribution of the
-    function is to over iterate an arbitrary number of bands and apply
+    function is to iterate over an arbitrary number of bands and apply
     inpainting to each separately. Processing time is highly dependent on the
     number of pixels to be inpainted.
 
@@ -124,56 +128,6 @@ def remove_glint_flatspec(image,wl,nir_band=(780,840)):
 
     return image_noglint
 
-
-def train_hedley_sun_glint(spec,wl,vis_band=(350,750),nir_band=(780,840)):
-    """ Train Hedley sun glint removal regression model
-
-    # Usage:
-    glint_reg = train_hedley_sun_glint(spec,wl,...)
-
-    # Required arguments:
-    spec:   2D numpy array with hyperspectral image, wavelengths along 2nd dim.
-            The cube should contain data from a homogenous bottom (e.g. deep sea)
-            and a representative variation of sun/sky glint.
-    wl:     1D array of wavelenghs (numeric). Must match the size of the 2nd
-            dimension of spec.
-
-    # Optional arguments:
-    vis_band:   2-element tuple with upper and lower wavelength of VIS band (nm).
-    nir_band:   2-element tuple with upper and lower limit of NIR band.
-                The NIR band is used to estimate the amount of sun glint present
-                in the VIS band.
-
-    # Returns:
-    glint_reg:
-
-    # Notes:
-    This function is based on the following paper: Hedley, J. D., Harborne, A.
-    R., & Mumby, P. J. (2005). Technical note: Simple and robust removal of sun
-    glint for mapping shallow‐water benthos. International Journal of Remote
-    Sensing, 26(10), 2107–2112. https://doi.org/10.1080/01431160500034086
-
-    """
-
-    # Calculate VIS and NIR indices
-    vis_ind = (wl >= vis_band[0]) & (wl <= vis_band[1])
-    nir_ind = (wl >= nir_band[0]) & (wl <= nir_band[1])
-
-    # Calculate mean NIR value in band
-    nir = np.mean(spec[:,nir_ind], keepdims=True)
-
-    # Extract VIS data
-    vis = spec[:,vis_band]
-
-    # Fit a linear regression model
-    reg = LinearRegression().fit(nir, vis)
-
-    # Estimate minimum NIR value as 2nd percentile (more robust than strict minimum)
-    min_nir = np.percentile(nir,2)
-
-    # The intercept value should be set to zero
-
-    return 0
 
 
 class HedleySunGlint:

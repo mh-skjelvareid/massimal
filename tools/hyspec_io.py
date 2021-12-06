@@ -43,3 +43,29 @@ def load_envi_image(header_filename,image_filename=None):
 
     # Returns
     return (im_cube,wl,rgb_ind,im_handle.metadata)
+
+
+def save_envi_image(header_filename,image,metadata,dtype = 'uint16', **kwargs):
+    """ Save ENVI file with parameters compatible with Spectronon
+
+    # Usage:
+    save_envi_image(header_filename,image,metadata)
+
+    # Required arguments:
+    header_filename:    Path to header file.
+                        Data file will be saved in the same location and with
+                        the same name, but without the '.hdr' extension
+    image:              Numpy array with hyperspectral image
+    metadata:           Dict containing (updated) image metadata.
+                        See load_envi_image()
+
+    Optional arguments:
+    dtype:      Data type for ENVI file. Follows numpy naming convention.
+                Typically 'uint16' or 'single' (32-bit float)
+    **kwargs:   Additional keyword arguments passed on to
+                spectral.envi.save_image()
+    """
+
+    # Save file
+    spectral.envi.save_image(header_filename,image,
+        dtype=dtype, metadata=metadata, force=True, ext=None, **kwargs)
