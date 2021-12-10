@@ -189,13 +189,21 @@ class HedleySunGlint:
         self.min_nir = np.percentile(nir,2)
 
 
-    def remove_glint(self,data):
+    def remove_glint(self,data,invalid_threshold=0.1):
         """ Remove sun glint by applying previously trained model
 
         # Required arguments:
         data:   2D or 3D spectral data, wavelengths along last dim.
                 The wavelengths must match those of the training data unsed
                 to fit the model.
+
+        # Optional arguments
+        invalid_threshold:  Number between 0 and 1, indicating the fraction of
+                            invalid pixels that is tolerated. Glint correction
+                            can cause pixels to have negative values, and these
+                            are considerend invalid and set to zero. If the
+                            threshold is exceeded, the whole spectrum for the
+                            pixel is set to zero.
 
         # Returns:
         vis:    2D or 3D spectral data, limited to visible range, with sun
@@ -213,14 +221,27 @@ class HedleySunGlint:
         # Offset NIR, taking into account "ambient" (minimum) NIR
         # NOTE: This may be unnecessary for UAV data (minimal atmosphere effects)?
         nir = nir - self.min_nir
-        nir[nir < 0] = 0;
+        nir[nir < 0] = 0
 
         # Estimate sun glint in VIS range and subtract it
         vis = vis - nir @ self.b    # Matrix mult. with slope b for each VIS band
 
+        # Set negative values to zero (negative values are non-physical)
+        vis[vis < 0] = 0
+
         # Reshape data to fit original dimensions
         output_shape = input_shape[:-1] + (vis.shape[-1],)
         vis = np.reshape(vis,output_shape)
+
+        # Set invalid pixels (too many zeros) to all-zeros
+        zeros_fraction = np.count_nonzero(vis == 0, axis=2) / vis.shape[2]
+        invalid_mask = zeros_fraction > invalid_threshold
+        vis[invalid_mask] = 0
+
+        # Set negative VIS values to zero
+        # Currently not included because it discards too much data
+        # neg_pix = np.any( vis < 0, axis = 2)
+        # vis[neg_pix] = 0
 
         # Return
         return vis
