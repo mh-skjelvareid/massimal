@@ -14,6 +14,6 @@ conda activate massimal
 pip install spectral
 conda install -c conda-forge jupyterlab
 conda install -c anaconda glob2
-conca install scikit-image
+conda install scikit-image
 conda install scikit-learn
 conda install -c conda-forge gdal
