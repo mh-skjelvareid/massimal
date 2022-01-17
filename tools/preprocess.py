@@ -74,7 +74,8 @@ def inpaint_masked(in_im, mask, inpaint_radius=3, inpaint_alg = 'ns'):
 
     # Convert image to float with single precision (32-bit), ensure 3D.
     # Note: .copy() needed to avoid modifying input image
-    out_im = np.atleast_3d(np.single(in_im.copy()))
+#    out_im = np.atleast_3d(np.single(in_im.copy()))
+    out_im = np.atleast_3d(in_im.copy())
 
     # Convert mask to 8-bit unsigned array
     mask = np.ubyte(mask)
@@ -92,7 +93,7 @@ def inpaint_masked(in_im, mask, inpaint_radius=3, inpaint_alg = 'ns'):
 
     # Loop over each image band and apply inpainting
     for ii in range(out_im.shape[2]):
-        print('Inpaiting band ' + str(ii) + ' of ' + str(out_im.shape[2]),end="\r")
+        print('Inpainting band ' + str(ii) + ' of ' + str(out_im.shape[2]),end="\r")
         out_im[:,:,ii] = cv2.inpaint( out_im[:,:,ii],mask,inpaint_radius,alg_flag)
 
     # Return
@@ -168,6 +169,10 @@ class HedleySunGlint:
         wl:     1D array of wavelenghs (numeric). Must match the size of the 2nd
                 dimension of spec.
 
+        # Notes:
+        The function will ignore data that is equal to zero across all bands
+        (typically non-valid pixels that have been actively set to zero).
+
         """
 
         # Calculate VIS and NIR indices
@@ -175,11 +180,15 @@ class HedleySunGlint:
         self.vis_ind = (wl >= self.vis_band[0]) & (wl <= self.vis_band[1])
         self.nir_ind = (wl >= self.nir_band[0]) & (wl <= self.nir_band[1])
 
+        # Calculate data mask for valid (non-zero) data points
+        nz_mask = ~np.all(spec==0,axis=1)
+
         # Calculate mean NIR value in band
-        nir = np.mean(spec[:,self.nir_ind], axis=1, keepdims=True)
+        # "Double indexing" needed for broadcasting to work
+        nir = np.mean(spec[nz_mask][:,self.nir_ind], axis=1, keepdims=True)
 
         # Extract VIS data
-        vis = spec[:,self.vis_ind]
+        vis = spec[nz_mask][:,self.vis_ind]
 
         # Fit a linear regression model
         reg = LinearRegression().fit(nir, vis)
@@ -189,7 +198,7 @@ class HedleySunGlint:
         self.min_nir = np.percentile(nir,2)
 
 
-    def remove_glint(self,data,invalid_threshold=0.1):
+    def remove_glint(self,data,invalid_threshold=0.2):
         """ Remove sun glint by applying previously trained model
 
         # Required arguments:
