@@ -4,7 +4,8 @@
 import skimage, skimage.io, skimage.morphology
 import numpy as np
 import spectral
-import misc, hyspec_io, preprocess, image_render
+import os
+import misc, hyspec_io, preprocess, image_render, annotation
 
 def detect_saturated(input_dir,recursive_src=False,**kwargs):
     """ Detect saturated pixels in image batch, save as PNG files
@@ -126,7 +127,6 @@ def absolute_stretch(input_dir,output_dir,limits,file_ext='png',recursive_src = 
 def envi_rgb_render(input_dir,output_dir=None,limits=None,recursive_src=False,inpaint=True,closing_rad=3):
     """ Create RGB renderings of hyperspectral files and save as PNG
 
-
     # Required arguments:
     input_dir:      Directory contating input image files.
                     All files will be included in the batch.
@@ -183,6 +183,76 @@ def envi_rgb_render(input_dir,output_dir=None,limits=None,recursive_src=False,in
         # Save
         print('Saving RGB render of hyperspectral file as ' + output_file)
         skimage.io.imsave(output_file,im_rgb_sc)
+
+
+def collect_annotated_data(class_dict, hyspec_dir, annotation_dir):
+    """ Loop through set of annotated images and extract spectra
+
+    # Usage:
+    data = collect_annotated_data(label_file, hyspec_dir, annotation_dir)
+
+    # Required arguments:
+    class_dict:     Dictionary with key = class name and value = png index
+    hyspec_dir:     Folder containing hyperspectral files
+    annotation_dir: Folder contating annotation images (.png)
+
+    # Returns
+    data:   List of dictionaries, with each dictionary containing data from a
+            single file. The dictionary contains paths to the original files,
+            annotation mask, mask indicating non-zero data points, and a
+            dictionary containing spectra for each class in class_dict.
+
+    # Note:
+    - The JSON and .png files are assumed to be generated in hasty.ai
+    - The hyperspectral files and annotation files are assument to share the
+      same file name (except the file extensions).
+    - If you are only interested in a few classes, limit the class_dict to
+      these classes. This can also help if you have a large dataset causing
+      memory issues. 
+
+    """
+
+    # Find names of annotated images
+    ann_im_fullpath = misc.file_pattern_search(annotation_dir,'*.png')
+
+    # Extract filename base (common for hyspec and annotations files)
+    filenames = [os.path.splitext(os.path.basename(filepath))[0] for filepath in ann_im_fullpath]
+
+    # Loop through files and collect spectra for each class
+    data = []
+    for file in filenames:
+        # Progression update
+        print('Processing file: ' + file)
+
+        # Load hyperspectral file
+        hyspec_file = os.path.join(hyspec_dir,file + '.bip.hdr')
+        (im_cube,wl,rgb_ind,metadata) = hyspec_io.load_envi_image(hyspec_file)
+
+        # Create non-zero mask
+        nonzero_mask = ~np.all(im_cube == 0,axis=2)
+
+        # Open annotation file
+        annotation_file = os.path.join(annotation_dir,file + '.png')
+        annotation_mask = skimage.io.imread(annotation_file) * nonzero_mask
+
+        # Create "local" dictionary for collecting data from current file
+        data_dict = {'hyspec_file': hyspec_file,
+                     'annotation_file': annotation_file,
+                     'nonzero_mask': nonzero_mask,
+                     'annotation_mask': annotation_mask,
+                     'spectra': {}}  # Empty dict, to be filled
+
+        # Collect spectra for each class
+        for (class_name,class_ind) in class_dict.items():
+            spec = im_cube[annotation_mask == class_ind]
+            data_dict['spectra'][class_name] = spec
+
+        # Append dictionary to file list
+        data.append(data_dict)
+
+    # Return
+    return data
+
 
 
 # def save_envi_rgb_image(input_dir,output_dir):

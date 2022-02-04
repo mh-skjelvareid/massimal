@@ -9,8 +9,10 @@
 # 	sys.path.append(/path/to/package)
 #
 # If working in Linux, the path to the package can also be added by modifying
-# the .bashrc file in the home directory (cleaner):
-#   export PYTHONPATH=/path/to/module
+# the .bashrc file in the home directory (cleaner, and only has to be done
+# once). Open .bashrc (for example by typing entering <gedit ~/.bashrc> in the
+# terminal) and add the following line, updating it to the actual path:
+#   export PYTHONPATH="{$PYTHONPATH}:/path/to/module"
 #
 # See https://bic-berkeley.github.io/psych-214-fall-2016/sys_path.html for a
 # nice explanation of how modules and paths are handled.
