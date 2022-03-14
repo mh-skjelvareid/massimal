@@ -3,11 +3,11 @@ import spectral
 import numpy as np
 
 #%% load_envi_image
-def load_envi_image(header_filename,image_filename=None):
+def load_envi_image(header_filename, image_filename=None, rgb_only=False):
     """ Load image in ENVI format, with wavelenghts and RGB indices
 
     # Usage:
-    (im_cube,wl,rgb_ind,metadata) = load_envi_image(header_filename,...)
+    (image,wl,rgb_ind,metadata) = load_envi_image(header_filename,...)
 
     # Required arguments:
     header_filename: Path to ENVI file header.
@@ -17,7 +17,7 @@ def load_envi_image(header_filename,image_filename=None):
                     automatically.
 
     Returns:
-    im_cube:    Full image
+    image:      Image (full cube as default, 3 RGB bands if rgb_only = True)
     wl:         Wavelength vector
     rgb_ind:    3-element tuple with indices to default RGB bands,
                 [640,550,460] nm
@@ -28,9 +28,8 @@ def load_envi_image(header_filename,image_filename=None):
     input arguments.
     """
 
-    # Load image
+    # Open image handle
     im_handle = spectral.io.envi.open(header_filename,image_filename)
-    im_cube = np.array(im_handle.load())
 
     # Read wavelengths
     wl = np.array([float(i) for i in im_handle.metadata['wavelength']])
@@ -41,8 +40,14 @@ def load_envi_image(header_filename,image_filename=None):
     # Get indices for standard RGB render
     rgb_ind = tuple((np.abs(wl - value)).argmin() for value in rbg_default)
 
+    # Read data from disk
+    if rgb_only:
+        image = im_handle[:,:,rgb_ind]      # Subscripting the image handle imports the requested data (RGB bands)
+    else:
+        image = np.array(im_handle.load())  # Read full 3D cube, cast as numpy array, converting from spectral.image.ImageArray
+
     # Returns
-    return (im_cube,wl,rgb_ind,im_handle.metadata)
+    return (image,wl,rgb_ind,im_handle.metadata)
 
 
 def save_envi_image(header_filename,image,metadata,dtype = 'uint16', **kwargs):
