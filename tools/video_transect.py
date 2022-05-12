@@ -120,9 +120,11 @@ def get_video_data(video_dir):
 
     """
 
-    # Create dataframe for holding video info
-    video_data = pd.DataFrame(columns=[
-        'FileName','DurationSec','StartTimeSec','StopTimeSec'])
+    video_data = pd.DataFrame({ 'FileName':'',
+                                'DurationSec':float(),
+                                'StartTimeSec':float(),
+                                'StopTimeSec':float()},
+                                 index=[])
 
     # Get list of video files, insert into dataframe
     # Use brackets to find both .mp4 and .MP4 files
@@ -131,11 +133,11 @@ def get_video_data(video_dir):
     # Get duration and frame rate for each video file
     for ii,file in enumerate(video_data['FileName']):
         probe_data = ffmpeg.probe(file)
-        video_data['DurationSec'][ii] = pd.to_numeric(probe_data['streams'][0]['duration'])
+        video_data.loc[ii,'DurationSec'] = pd.to_numeric(probe_data['streams'][0]['duration'])
 
-    # Calculate start/stop times for each video
-    video_data['StartTimeSec'][0] = 0.0
-    video_data['StartTimeSec'][1:] = np.cumsum(video_data['DurationSec'][0:-1])
+    video_data.iloc[0,video_data.columns.get_loc('StartTimeSec')] = 0.0
+    video_data.iloc[1:,video_data.columns.get_loc('StartTimeSec')] = np.cumsum(
+        video_data.iloc[:-1,video_data.columns.get_loc('DurationSec')])
     video_data['StopTimeSec'] = video_data['StartTimeSec'] + video_data['DurationSec']
 
     return video_data
@@ -160,7 +162,7 @@ def prepare_gdf_with_video_data(gdf,video_data):
 
     # Insert additional columns
     gdf.insert(gdf.shape[1]-1,'VideoFile','')
-    gdf.insert(gdf.shape[1]-1,'VideoRelTime','')
+    gdf.insert(gdf.shape[1]-1,'VideoRelTime',float())
 
     # Remove logged positions without video data
     ind_within_video_duration = (gdf['TimeDiffSec'] <= video_data['StopTimeSec'].iloc[-1])
@@ -191,7 +193,7 @@ def extract_images_from_video(gdf,image_dir):
     """
 
     # Insert additional column for image path
-    gdf.insert(gdf.shape[1]-1,'ImagePath','')
+    gdf.insert(gdf.shape[1]-1,'ImageFile','')
 
     # Loop over every row, create image and save image file name
     for ii in tqdm(range(len(gdf))):    # Use tqdm to display progress bar
@@ -199,10 +201,10 @@ def extract_images_from_video(gdf,image_dir):
         image_file_name = (Path(gdf.iloc[ii]['VideoFile']).stem + '_' +
                            sec_to_timestring(gdf.iloc[ii]['VideoRelTime']) + '.jpg')
 
-        abs_path = Path(image_dir,image_file_name)
-        rel_path = Path(abs_path.parent.name, image_file_name)
+        gdf.iloc[ii, gdf.columns.get_loc('ImageFile')] = str(image_file_name)
 
-        gdf.iloc[ii, gdf.columns.get_loc('ImagePath')] = str(rel_path)
+        abs_path = Path(image_dir,image_file_name)
+        #rel_path = Path(abs_path.parent.name, image_file_name)
 
         # Extract image from video and save
         image_from_video(gdf.iloc[ii]['VideoFile'],
