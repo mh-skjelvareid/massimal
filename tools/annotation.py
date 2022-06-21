@@ -152,8 +152,8 @@ def extract_subset(class_dict,class_mask,classes_to_extract, reset_class_ind = T
     return subset_class_dict, subset_class_mask
 
 
-def merge_classes(class_dict,class_mask,classes_to_merge,merged_class_names):
-    """ Extract a subset from a set of annotated classes
+def merge_classes_with_mask(class_dict,class_mask,classes_to_merge,merged_class_names):
+    """ Merge subsets of a set of annotated classes
 
     # Usage
     (merged_class_dict, merged_class_mask) =
@@ -170,8 +170,7 @@ def merge_classes(class_dict,class_mask,classes_to_merge,merged_class_names):
     # Returns
     merged_class_dict       Dict, keys = subset class names,
                             values = updated class indices
-    merged_class_mask       Image, map of class indices for extracted classes
-                            Background (no annotation) pixels are set to zero.
+    merged_class_mask       Image, map of class indices for merged classes.
 
     """
 
@@ -209,3 +208,105 @@ def merge_classes(class_dict,class_mask,classes_to_merge,merged_class_names):
         merged_class_ind += 1
 
     return merged_class_dict, merged_class_mask
+
+
+def merge_classes_in_label_vector(class_dict,y,classes_to_merge,merged_class_names):
+    """ Merge subsets of a set of annotated classes
+
+    # Usage
+    (class_dict_merged, y_merged) = merge_classes_in_label_vector(
+        class_dict,y,classes_to_merge,merged_class_names)
+
+    # Required arguments
+    class_dict:             Dict, keys = class names, values = class indices
+    y:                      Label vector (integers)
+    classes_to_merge:       List of lists, each sub-list containing classes to
+                            be merged into a single new class
+    merged_class_names:     List with names for each new merged class
+
+
+    # Returns
+    class_dict_merged       Dict, keys = merged class names,
+                            values = updated class indices
+    y_merged                Image, map of class indices for extracted classes
+
+    """
+
+    assert len(classes_to_merge) == len(merged_class_names)
+
+    # Copy original dict and mask
+    class_dict_merged = {}
+    class_dict_copy = copy.deepcopy(class_dict)
+    y_merged = np.zeros(y.shape)
+
+    for ii,class_set in enumerate(classes_to_merge):
+        # Set index for merged class (starts at 1, reserve 0 for background)
+        merged_class_ind = ii+1
+
+        # Insert index for merged class in dict
+        class_dict_merged[merged_class_names[ii]] = merged_class_ind
+
+        for class_name in class_set:
+            if class_name in class_dict:
+                # Remove class from copy of original dict
+                class_dict_copy.pop(class_name)
+
+                # Update y vector
+                y_merged[y == class_dict[class_name]] = merged_class_ind
+
+            else:
+                raise ValueError('Class name \"' + class_name + '\" in classes_to_merge ' +
+                                'does not match any names in class_dict')
+
+    # Loop through remaining classes and insert them "at the end"
+    merged_class_ind += 1
+    for class_name in class_dict_copy:
+        class_dict_merged[class_name] = merged_class_ind
+        y_merged[y == class_dict[class_name]] = merged_class_ind
+
+        merged_class_ind += 1
+
+    # Return
+    return class_dict_merged, y_merged
+
+
+def annotation_data_to_matrix(data,class_dict):
+    """ Convert data structure with spectra from annotation into X,y pair
+
+    # Usage:
+    (X,y) = annotation_data_to_matrix(data,class_dict)
+
+    # Required arguments:
+    data:           Data structure from batch_process.collect_annotated_data()
+    class_dict:     Dict with class names as keys and class indices as values
+
+    # Returns:
+    X:      Matrix with samples along 1. dim and wavelengths along 2. dim
+    y       Vector with class indices (length equal to first dim. of X)
+
+    """
+    # Find total number of spectra in data
+    n_samp = 0
+    for element in data:
+        for class_name in element['spectra'].keys():
+            n_samp += element['spectra'][class_name].shape[0]
+
+    # Find number of spectral channels, using info from last file
+    n_spec = element['spectra'][class_name].shape[1]
+
+    # Preallocate X and y
+    X = np.zeros((n_samp,n_spec))
+    y = np.zeros(n_samp)
+
+    # Loop over all images and insert spectra into X and y
+    ind = 0
+    for element in data:
+        for class_name in element['spectra'].keys():
+            n_samp_loc = element['spectra'][class_name].shape[0]
+
+            X[ind:(ind + n_samp_loc),:] = element['spectra'][class_name]
+            y[ind:(ind + n_samp_loc)] = class_dict[class_name]
+
+            ind = ind + n_samp_loc
+
+    return X,y

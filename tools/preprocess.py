@@ -39,7 +39,7 @@ def inpaint_masked(in_im, mask, inpaint_radius=3, inpaint_alg = 'ns'):
     """ Inpaint masked pixels in all bands of multiband image
 
     # Usage:
-    out_im = detect_saturated(in_im,mask,...)
+    out_im = inpaint_masked(in_im,mask,...)
 
     # Required arguments:
     in_im:  2D or 3D image array. Multiband images are assumed to have bands

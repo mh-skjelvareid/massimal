@@ -199,8 +199,9 @@ def collect_annotated_data(class_dict, hyspec_dir, annotation_dir):
     # Returns
     data:   List of dictionaries, with each dictionary containing data from a
             single file. The dictionary contains paths to the original files,
-            annotation mask, mask indicating non-zero data points, and a
-            dictionary containing spectra for each class in class_dict.
+            annotation mask, mask indicating non-zero data points, a
+            wavelength vector, a list of indices for RGB, and a dictionary
+            containing spectra for each class in class_dict.
 
     # Note:
     - The JSON and .png files are assumed to be generated in hasty.ai
@@ -208,7 +209,7 @@ def collect_annotated_data(class_dict, hyspec_dir, annotation_dir):
       same file name (except the file extensions).
     - If you are only interested in a few classes, limit the class_dict to
       these classes. This can also help if you have a large dataset causing
-      memory issues. 
+      memory issues.
 
     """
 
@@ -225,7 +226,10 @@ def collect_annotated_data(class_dict, hyspec_dir, annotation_dir):
         print('Processing file: ' + file)
 
         # Load hyperspectral file
-        hyspec_file = os.path.join(hyspec_dir,file + '.bip.hdr')
+        #hyspec_file = os.path.join(hyspec_dir,file + '*.bip.hdr')
+        hyspec_file_tmp = misc.file_pattern_search(hyspec_dir, file + '*.hdr')
+        hyspec_file = hyspec_file_tmp[0]
+        print('Opening file ' + hyspec_file)
         (im_cube,wl,rgb_ind,metadata) = hyspec_io.load_envi_image(hyspec_file)
 
         # Create non-zero mask
@@ -240,6 +244,8 @@ def collect_annotated_data(class_dict, hyspec_dir, annotation_dir):
                      'annotation_file': annotation_file,
                      'nonzero_mask': nonzero_mask,
                      'annotation_mask': annotation_mask,
+                     'wavelength': wl,
+                     'rgb_ind': rgb_ind,
                      'spectra': {}}  # Empty dict, to be filled
 
         # Collect spectra for each class

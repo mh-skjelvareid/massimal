@@ -2,6 +2,9 @@
 import glob
 import os
 import shutil
+import pickle
+import importlib
+
 
 def file_pattern_search(root_dir, file_pattern, recursive = False):
     """ Find all files matching pattern inside a "root" directory
@@ -103,3 +106,34 @@ def copy_hyspec_aux_files(hdr_file,dest_dir,copy_lcf = True,copy_times=True):
     times_path = base_name + '.bip.times'
     if copy_times and os.path.exists(times_path):
         shutil.copy(times_path,dest_dir)
+
+
+def pickle_save_data(data,filename):
+    """ Serialize and save data using Pickle
+
+    # Required arguments
+    data            - Python object, e.g. list, dict, numpy array
+    filename        - File name (string)
+
+    """
+    with open(filename, 'wb') as f:
+        pickle.dump(data, f)
+
+
+def pickle_load_data(filename):
+    """ Load serialized (pickled) data
+
+    # Required arguments:
+    filename        - File name (string)
+
+    # Returns:
+    data            - de-serialized Python object
+    """
+
+    with open(filename,'rb') as f:
+        data = pickle.load(f)
+
+    return data
+
+def reload_module(imported_module):
+    importlib.reload(imported_module)
