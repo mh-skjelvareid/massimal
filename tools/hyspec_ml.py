@@ -1,4 +1,11 @@
 import numpy as np
+from sklearn.base import BaseEstimator
+
+from skimage.morphology import binary_closing
+from skimage.morphology import disk
+
+import hyspec_io
+import cv2
 
 class ImageVectorizer:
     """ Helper class for vectorizing and de-vectorizing image data for machine learning
@@ -84,3 +91,96 @@ class ImageVectorizer:
 
         """
         return np.reshape(vector, (self.nRows,self.nCols))
+
+
+# Define class for using only a subset of wavelengths
+class WavelengthSelector(BaseEstimator):
+    """ Simple class for selecting a range of wavelength in a matrix
+
+    # Usage:
+    ws = WavelengthSelector(wl,wl_min,wl_max)
+
+    # Notes:
+    Useful for selecting wavelength range as part of ML pipeline
+
+    """
+
+    def __init__(self, wl, wl_min, wl_max):
+        self.wl = wl
+        self.wl_min = wl_min
+        self.wl_max = wl_max
+        self.wl_ind = (wl >= wl_min) & (wl <= wl_max)
+
+    def transform(self, X):
+        """ Extract subset of X matrix based on selected wavelengths
+
+        # Required arguments:
+        X:      2D matrix, samples along 1. dim, wavelengths along 2. dim
+
+        """
+        cols = X[:,self.wl_ind] # Extract columns
+        return cols
+
+    def fit(self, X, y=None):
+        return self
+
+
+def save_classification_as_envi(class_im, map_info, filename):
+    """ Save classification image (numeric labels) as georeferenced ENVI file
+
+    # Required arguments:
+    class_im:   2D classification image, typically integers
+    map_info:   Map info from imported hyperspectral image metadata
+                    (metadata['map info'])
+    filename:   Path to header file for ENVI file output
+                File should have the extension ".hdr".
+
+    """
+
+    # Create dict and insert map info
+    metadata = {}
+    metadata['map info'] = map_info
+
+    # Save file
+    hyspec_io.save_envi_image(header_filename = filename,
+                          image = class_im,
+                          metadata = metadata,
+                          dtype = class_im.dtype)
+
+
+def apply_classifier_to_image(classifier,image,fill_zeros=True):
+    """ Apply classifier to hyperspectral image
+
+    # Required arguments:
+    classifier:     Trained classifier which accepts data as X matrix with
+                    samples along 1. dimension and wavelengths along 2. dimension.
+    image:          3D tensor with spatial axes along 2 first dimensions and
+                    wavelength along 3. dimension. Internally, the matrix is
+                    reshaped into a 2D matrix with wavelength along 2. dim.
+
+    # Optional arguments:
+    fill_zeros:     Fill in zeros in the classification result using inpainting
+                    (zeros can potentially appear in georeferenced images)
+
+    """
+
+    # Make image vectorizer
+    im_vz = ImageVectorizer(image.shape[0],image.shape[1])
+
+    # Apply classifier to whole image
+    y_pred = classifier.predict(im_vz.image3d_to_matrix(image))
+    y_pred_im = im_vz.vector_to_image2d(y_pred)
+
+    # Set prediction results for "zero pixels" to zero (background)
+    zero_mask = np.all(image==0,axis=2)
+    y_pred_im[zero_mask] = 0
+
+    if fill_zeros:
+        # Determine which pixels to inpaint
+        nonzero_mask_holes_filled = binary_closing(~zero_mask,footprint=disk(radius=3))
+        inpaint_mask = zero_mask & nonzero_mask_holes_filled
+
+        # Inpaint zero pixels inside image
+        y_pred_im = cv2.inpaint(np.ubyte(y_pred_im),np.ubyte(inpaint_mask),inpaintRadius=3,flags=cv2.INPAINT_NS)
+
+    return y_pred_im
