@@ -33,7 +33,7 @@ def random_sample_image(image,frac=0.05,ignore_zeros=True,replace=False):
         mask = np.ones(image.shape[:-1],axis=2)
 
     # Calculate number of samples
-    n_samp = np.int64(frac*X.shape[0])
+    n_samp = np.int64(frac*np.count_nonzero(mask))
 
     # Create random number generator
     rng = default_rng()
