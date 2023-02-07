@@ -186,4 +186,3 @@ def apply_classifier_to_image(classifier,image,fill_zeros=True):
 
     return y_pred_im
 
-
