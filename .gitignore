@@ -113,3 +113,4 @@ dmypy.json
 # Pyre type checker
 .pyre/
 prelim/tensorflow/model.png
+dataset_specific/20220630_Juvika/model.png
