@@ -1,8 +1,7 @@
 import numpy as np
 import math
 import tensorflow as tf
-
-
+from collections.abc import Iterable
 
 def pad_image_to_multiple(image,multiple):
     """ Zero-pad image spatially to multiple of given number 
@@ -35,6 +34,53 @@ def pad_image_to_multiple(image,multiple):
     return image_padded
 
 
+
+# Function for extracting tiles
+def labeled_image_to_tensor_tiles(image,labels,tile_shape,
+                                  tile_strides=None,padding='SAME',
+                                  min_labeled_fraction = 0.05):
+    """ Split image and label mask into smaller tiles
+    
+    # Usage:
+    (image_tiles,label_tiles) = ...
+    
+    # Input arguments:
+    image:        3D numpy array with dimensions (rows, columns, channels)
+    labels:       2D numpy array with dimensions (rows,columns)
+    tile_shape:   Tuple of integers, (tile_rows, tile_cols)
+    
+    # Keyword arguments
+    tile_strides: Tuple of integers, (row_stride, col_stride)
+                  If None, set equal to tile_shape (no overlap between tiles)
+    padding:      'VALID' or 'SAME' (see tensorflow.image.extract_patches)
+                  Default: 'SAME'
+    min_labeled_fraction:   Use this to filter out tiles with zero or low
+                            number of labeled pixels. Set to zero to include all 
+                            pixels.
+    """
+    
+    if tile_strides is None: tile_strides = tile_shape
+    
+    image_tensor = tf.reshape(tf.convert_to_tensor(image),(1,)+image.shape)
+    label_tensor = tf.reshape(tf.convert_to_tensor(labels),(1,)+labels.shape + (1,))
+    
+    sizes = [1,*tile_shape,1]
+    strides = [1,*tile_strides,1]
+    rates = [1,1,1,1]
+    
+    image_tiles = tf.image.extract_patches(image_tensor, sizes, strides, rates, padding=padding)
+    image_tiles = tf.reshape(image_tiles,[-1,*tile_shape,image.shape[-1]])
+    label_tiles = tf.image.extract_patches(label_tensor, sizes, strides, rates, padding=padding)
+    label_tiles = tf.reshape(label_tiles,[-1,*tile_shape])
+    
+    # Filter out tiles with zero or few annotated pixels (optional)
+    if min_labeled_fraction > 0:
+        labeled_tiles_mask = np.array(
+            [(np.count_nonzero(tile)/np.size(tile))>min_labeled_fraction for tile in label_tiles])
+        image_tiles = tf.boolean_mask(image_tiles,labeled_tiles_mask)
+        label_tiles = tf.boolean_mask(label_tiles,labeled_tiles_mask)
+        
+    return image_tiles, label_tiles
 
 
 
@@ -78,7 +124,7 @@ def resampling_layer(resampling_type,
             tf.keras.layers.Conv2D(
                 filter_channels, 
                 kernel_size, 
-                strides=downsampling_factor, 
+                strides=resampling_factor, 
                 padding='same',                          
                 kernel_initializer=initializer, 
                 use_bias=not(apply_batchnorm)))   
@@ -87,7 +133,7 @@ def resampling_layer(resampling_type,
             tf.keras.layers.Conv2DTranspose(
                 filter_channels, 
                 kernel_size, 
-                strides=upsampling_factor, 
+                strides=resampling_factor, 
                 padding='same',
                 kernel_initializer=initializer,
                 use_bias=not(apply_batchnorm)))
@@ -109,3 +155,122 @@ def resampling_layer(resampling_type,
     return resamp_layer
 
     
+    
+def unet(input_channels, output_channels, first_layer_channels, depth, 
+         model_name=None, flip_aug=True, trans_aug=False, 
+         apply_batchnorm = True, apply_dropout = False):
+    """ Simple encoder-decoder U-Net architecture
+    
+    # Arguments:
+    input_channels:         Number of channels in input image
+    output_channels:        Number of classes (including background) to segment between
+    first_layer_channels:   Number of channels in first downsampling layer
+                            Each consecutive downsampling layer doubles the number of channels
+                            In upsampling, each layer halves the number of channels
+    depth:                  Number of resampling steps to perform.
+                            Example: If depth = 3, the original image is downsampled to 
+                            resolutions 1/2, 1/4 and 1/8 of the original resolution, and then
+                            upsampled to the original resolution via the same steps.
+                            The total number of down- and upsampling layers is thus
+                            equal to 2*depth (6 for the example above).
+    
+    # Keyword arguments:
+    model_name:               Name of model
+    flip_aug:           If true, a RandomFlip augmentation layer is included
+                        before the first downsampling layer
+    trans_aug:          If true, a RandomTranslation augmentation layer with 
+                        height and width factor of 20% is included
+                        before the first downsampling layer
+    apply_batchnorm:    If (boolean) scalar, indicate whether to use batch normalization
+                        in all downsampling / upsampling layers
+                        If tuple of booleans (length equal to total number of 
+                        downsampling / upsampling layers), indicate use of batch noarmalization
+                        for each layer
+    apply_dropout:      If (boolean) scalar, indicate whether to use dropout (rate 0.5)
+                        in all downsampling / upsampling layers.
+                        If tuple of booleans (length equal to total number of 
+                        downsampling / upsampling layers), indicate use of dropout
+                        for each layer
+                        
+    # Outputs:
+    model:              Keras U-Net model
+    
+    # Notes:
+    - Based on TF tutorial: https://www.tensorflow.org/tutorials/images/segmentation
+
+    """
+    resamp_kernel_size = 4
+
+    # Create vectors for batchnorm / dropout booleans if scalar
+    if not isinstance(apply_batchnorm,Iterable):
+        apply_batchnorm = [apply_batchnorm for _ in range(depth*2)]
+
+    if not isinstance(apply_dropout,Iterable):
+        apply_dropout = [apply_dropout for _ in range(depth*2)]
+
+
+    # Define input
+    inputs = tf.keras.layers.Input(shape=[None, None, input_channels],name='input_image')   # Using None to signal variable image width and height (Ny,Nx,3)
+    x = inputs    # x used as temparary variable for data flowing between layers
+
+    # Add augmentation layer(s)
+    if flip_aug or trans_aug:
+        aug_layer = tf.keras.Sequential(name='augmentation')
+        if flip_aug:
+            aug_layer.add(tf.keras.layers.RandomFlip())
+        if trans_aug:
+            aug_layer.add(tf.keras.layers.RandomTranslation(height_factor=0.2,width_factor=0.2))
+        x = aug_layer(x)
+
+    # Add initial convolution layer with same resolution as input image
+    x = tf.keras.layers.Conv2D(first_layer_channels,kernel_size=3,padding='same', name = 'initial_convolution',activation='relu')(x)
+
+    # Define downsampling layers
+    down_stack = []
+    nchannels_downsamp = [first_layer_channels*(2**(i+1)) for i in range(depth)]
+    names_downsamp = [f'downsamp_res_1/{(2**(i+1))}' for i in range(depth)]  
+    for channels, name, batchnorm, dropout in zip(nchannels_downsamp,names_downsamp,apply_batchnorm[0:depth],apply_dropout[0:depth]):
+        down_stack.append(resampling_layer('downsample',
+                                           channels,
+                                           resamp_kernel_size,
+                                           name = name,
+                                           apply_batchnorm=batchnorm,
+                                           apply_dropout=dropout))
+
+    # Define upsampling layers
+    up_stack = []
+    nchannels_upsamp = [first_layer_channels*(2**(depth-1))] + [first_layer_channels*(2**i) for i in range(depth-1,0,-1)]
+    names_upsamp = [f'upsamp_res_1/{2**i}' for i in range(depth-1,-1,-1)]   
+    for channels, name, batchnorm, dropout in zip(nchannels_upsamp,names_upsamp,apply_batchnorm[depth:], apply_dropout[depth:]):
+        up_stack.append(resampling_layer('upsample',
+                                         channels,
+                                         resamp_kernel_size,
+                                         name = name,
+                                         apply_batchnorm=batchnorm,
+                                         apply_dropout=dropout))    
+
+    # Downsampling through the model
+    skips = [x]                   # Add output from first layer (before downsampling) to skips list
+    for down in down_stack:
+        x = down(x)               # Run input x through layer, then set x equal to output
+        skips.append(x)           # Add layer output to skips list
+
+    skips = reversed(skips[:-1])  # Reverse list, and don't include skip for last layer ("bottom of U") 
+
+    # Upsampling and establishing the skip connections
+    names_skip = [f'skipconnection_res_1/{2**i}' for i in range(depth-1,-1,-1)]   
+    for up, skip, skipname in zip(up_stack, skips, names_skip):
+        x = up(x)                                     # Run input x through layer, then set x to output
+        x = tf.keras.layers.Concatenate(name=skipname)([x, skip])  # Stack layer output together with skip connection 
+
+    # Final layer
+    last = tf.keras.layers.Conv2D(output_channels, 
+                                  kernel_size = 3,
+                                  padding='same',
+                                  activation='softmax',
+                                  name='classification')    
+    x = last(x)
+
+    model =  tf.keras.Model(inputs=inputs, outputs=x,name=model_name)
+
+    return model
