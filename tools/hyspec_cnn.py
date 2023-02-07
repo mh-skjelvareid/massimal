@@ -107,3 +107,5 @@ def resampling_layer(resampling_type,
         resamp_layer.add(tf.keras.layers.ReLU()) 
 
     return resamp_layer
+
+    
