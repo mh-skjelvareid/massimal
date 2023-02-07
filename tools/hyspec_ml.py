@@ -6,6 +6,7 @@ from skimage.morphology import disk
 
 import hyspec_io
 import cv2
+import math
 
 class ImageVectorizer:
     """ Helper class for vectorizing and de-vectorizing image data for machine learning
@@ -184,3 +185,5 @@ def apply_classifier_to_image(classifier,image,fill_zeros=True):
         y_pred_im = cv2.inpaint(np.ubyte(y_pred_im),np.ubyte(inpaint_mask),inpaintRadius=3,flags=cv2.INPAINT_NS)
 
     return y_pred_im
+
+
