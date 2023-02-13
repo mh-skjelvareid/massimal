@@ -212,3 +212,44 @@ def extract_images_from_video(gdf,image_dir):
                             gdf.iloc[ii]['VideoRelTime'])
 
     return gdf
+
+
+def filter_gdf_on_distance(gdf,epsg=32633,sample_distance=0.7, inplace=False, outlier_distance = 1000):
+    """ Filter a geodataframe by only including new samples if position has changed
+    
+    # Usage:
+    gdf_filtered = filter_gdf_on_distance(gdf,...)
+
+    # Input arguments:
+    gdf:        GeoPandas GeoDataFrame object
+    
+    # Keyword arguments:
+    epsg:                EPSG code (integer) for CRS to measure distance in
+                         Default: 32633 (UTM 33N)
+    sample_distance       Minimum change in position in order for next sample to be included
+    outlier_distance      Samples with changes in distance above this limit are not included
+    
+    """
+    
+    # Convert CRS (often necessary to get valid distance units, e.g. meters)
+    if epsg is not None:
+        geom = gdf.geometry.to_crs(epsg=epsg)
+    else:
+        geom = gdf.geometry
+    
+    # Create a copy of the geodatafram
+    if not inplace:
+        gdf = gdf.copy()
+        
+    # Iterate over all positions and only include a new point if position 
+    # has changed more than sample_distance
+    mask = [0]
+    last_pos = geom[0]
+    for index, position in enumerate(geom):
+        dist = position.distance(last_pos)
+        if (dist > sample_distance) and (dist < outlier_distance):
+            mask.append(index)
+            last_pos = position
+    gdf = gdf.iloc[mask]
+    
+    return gdf
