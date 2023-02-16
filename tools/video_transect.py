@@ -269,14 +269,14 @@ def extract_images_from_video(gdf,image_dir):
     gdf.insert(gdf.shape[1]-1,'ImageFile','')
 
     # Loop over every row, create image and save image file name
-    for ii in tqdm.tqdm(range(len(gdf))):    # Use tqdm to display progress bar
+    for ii in tqdm(range(len(gdf))):    # Use tqdm to display progress bar
         # Create file name and log it to the geodataframe
-        image_file_name = pathlib.Path(gdf.iloc[ii].VideoFile).stem + '_' + \
+        image_file_name = Path(gdf.iloc[ii].VideoFile).stem + '_' + \
                            sec_to_timestring(gdf.iloc[ii].TimeRelToFileStartSec) + '.jpg'
         gdf.iloc[ii, gdf.columns.get_loc('ImageFile')] = str(image_file_name)  # Must use get_loc for "mixed" indexing with ints and names
         
         # Create absolute path
-        abs_path = pathlib.Path(image_dir,image_file_name)
+        abs_path = Path(image_dir,image_file_name)
 
         # Extract image from video and save
         image_from_video(gdf.iloc[ii].VideoFile,
