@@ -190,7 +190,7 @@ def get_video_data(video_dir, tz='Europe/Oslo'):
 
 
 
-def prepare_gdf_with_video_data(gdf,video_data, video_time_offset=pd.Timedelta(0)):
+def prepare_gdf_with_video_data(gdf,video_data, video_offset_sec=0.0):
     """ Insert video information into geodataframe, prepare for extracting images
 
     # Usage:
@@ -203,12 +203,9 @@ def prepare_gdf_with_video_data(gdf,video_data, video_time_offset=pd.Timedelta(0
                 (see get_video_data())
     
     # Keyword arguments:
-    video_time_offset:    pandas.Timedelta object with time difference between
-                          video datetime ("CreationTime") and GNSS track datetime.
-                          Example: GoPro camera at Norwegian local time and 
-                          daylight saving time is 2 hours "in front of"
-                          GNNS using UTC time, resulting in
-                          video_time_offset = pandas.Timedelta(hours=2)
+    video_offset_sec:     number of seconds time difference between
+                          video datetime (based on "CreationTime") and 
+                          GNSS track datetime. Default: 0.
 
     # Returns
     gdf:        geodataframe with video information inserted
@@ -223,7 +220,7 @@ def prepare_gdf_with_video_data(gdf,video_data, video_time_offset=pd.Timedelta(0
     gdf.insert(gdf.shape[1]-1,'TimeRelToFileStartSec',float())
     
     # Calculate time for logged positions relative to video
-    gdf.TimeRelToVideoStart = gdf.Time - (video_data.iloc[0].CreationTime - video_time_offset)
+    gdf.TimeRelToVideoStart = gdf.Time - (video_data.iloc[0].CreationTime - pd.Timedelta(seconds=video_offset_sec))
     
     # Exclude positions outside video time window
     ind_within_video_duration = (gdf.TimeRelToVideoStart >= pd.Timedelta(0)) & (
