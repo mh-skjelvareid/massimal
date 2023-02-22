@@ -234,8 +234,8 @@ def prepare_gdf_with_video_data(gdf,video_data, video_offset_sec=0.0):
                gdf.TimeRelToVideoStart < pd.Timedelta(seconds=video_data.iloc[ii].StopTimeSec))
         # Set video file and times for current video 
         gdf.loc[ind, 'VideoFile'] = video_data.iloc[ii].FileName
-        time_rel_to_video_start = gdf.loc[ind, 'TimeRelToVideoStart'] - pd.Timedelta(seconds=video_data.iloc[ii].StartTimeSec)
-        gdf.loc[ind, 'TimeRelToFileStartSec'] = time_rel_to_video_start.dt.total_seconds() #gdf.loc[ind, 'TimeRelToVideoStart'] - pd.Timedelta(seconds=video_data.iloc[ii].StartTimeSec)
+        time_rel_to_file_start = gdf.loc[ind, 'TimeRelToVideoStart'] - pd.Timedelta(seconds=video_data.iloc[ii].StartTimeSec)
+        gdf.loc[ind, 'TimeRelToFileStartSec'] = time_rel_to_file_start.dt.total_seconds() 
         
     return gdf
 
