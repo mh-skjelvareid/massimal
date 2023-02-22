@@ -36,7 +36,7 @@ def percentile_stretch(image,percentiles=(2,98),separate_bands=True, ignore_zero
     """
 
     # Preallocate output array
-    im_rescaled = np.zeros(image.shape)
+    im_rescaled = np.zeros_like(image)
 
     # Create mask indicating non-zero pixels
     if ignore_zeros:
