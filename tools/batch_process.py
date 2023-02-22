@@ -6,6 +6,8 @@ import numpy as np
 import spectral
 import os
 import misc, hyspec_io, preprocess, image_render, annotation
+import tqdm
+import pathlib
 
 def detect_saturated(input_dir,recursive_src=False,**kwargs):
     """ Detect saturated pixels in image batch, save as PNG files
@@ -260,6 +262,41 @@ def collect_annotated_data(class_dict, hyspec_dir, annotation_dir):
     return data
 
 
+def underwater_image_correction(input_dirs, output_dirs, 
+                                file_ext = 'jpg', percentiles=(0.5,99), separate_bands=True, ignore_zeros=False):
+    """ Underwater image correction (color balance and contrast) based on percentile stretching
+    
+    # Arguments:
+    input_dirs:    List of input directories containing images to be corrected (strings)
+    output_dirs:   List of output directories for saving corrected images (strings)
+                   (must be same length as input_dirs)
+                   
+    # Keyword arguments:
+    file_ext:        Image file extension as string (default 'jpg')
+    percentiles:     Lower and upper image limits (basically values for "black" and "white"),
+                     expressed as percentiles of values present in image
+    separate_bands:  If True, each image band is stretched independently 
+                     (percentile values calculated for each band).
+                     If False, the "global" percentiles across the bands are used.
+    ignore_zeros:    Whether to include all-zero pixels (across all bands) 
+                     when calculating percentile values. 
+    
+    """
+    
+    for input_dir, output_dir in zip(input_dirs, output_dirs):
+        input_files = misc.file_pattern_search(input_dir,'*.'+file_ext)
+        print(f'Processing {len(input_files)} images in {input_dir}:')
+        output_dir_path = pathlib.Path(output_dir)
+        for file in tqdm.tqdm(input_files):
+            image = skimage.io.imread(file)
+            image_corrected = image_render.percentile_stretch(image,
+                                                              percentiles = percentiles,
+                                                              separate_bands=True, 
+                                                              ignore_zeros=False)
+            output_path = output_dir_path / pathlib.Path(file).name
+            skimage.io.imsave(output_path, image_corrected, check_contrast=False)
+            
+            
 
 # def save_envi_rgb_image(input_dir,output_dir):
 #     """
