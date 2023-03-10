@@ -274,3 +274,20 @@ def unet(input_channels, output_channels, first_layer_channels, depth,
     model =  tf.keras.Model(inputs=inputs, outputs=x,name=model_name)
 
     return model
+
+
+def add_background_zero_weight(image, labels):    
+    """ Add weight "image" with zero weight for background
+    
+    # Typical usage: 
+    dataset_with_weights = dataset.map(add_background_zero_weight)
+    
+    """
+    label_mask = tf.greater(labels,0)
+    zeros = tf.zeros_like(labels,dtype=tf.float32)
+    ones = tf.ones_like(labels,dtype=tf.float32)
+    
+    # "Multiplex" using label mask, ones for annotated pixels, zeros for background
+    sample_weights = tf.where(label_mask, ones, zeros)  # 
+
+    return image, labels, sample_weights
