@@ -186,3 +186,45 @@ def apply_classifier_to_image(classifier,image,fill_zeros=True):
 
     return y_pred_im
 
+
+def pca_transform_image(image,W_pca,X_mean,X_std=None):
+    """ Apply PCA transform to 3D image cube 
+    
+    # Arguments:
+    image       NumPy array with 3 dimensions (n_rows,n_cols,n_channels)
+    W_pca       PCA weight matrix with 2 dimensions (n_channels,n_components)
+    X_mean      Mean value vector, to be subtracted from data ("centering")
+                Length (n_channels,)
+    
+    # Keyword arguments:
+    X_std       Standard deviation vector, to be used for scaling (z score)
+                If None, no scaling is performed
+                Length (n_channels)
+                
+    # Returns:
+    image_pca   Numpy array with dimension (n_rows, n_cols, n_channels)
+    
+    # Notes:
+    - Input pixels which are zero across all channels are set to zero in the 
+    output PCA image as well.
+    
+    """
+    # Create mask for nonzero values
+    nonzero_mask = ~np.all(image==0,axis=2,keepdims=True)
+    
+    # Vectorize image
+    im_vec = np.reshape(image,(-1,image.shape[-1]))
+    
+    # Subtract mean (always) and scale (optional)
+    im_vec_norm = im_vec-X_mean
+    if X_std is not None:
+        im_vec_norm = im_vec_norm/X_std
+
+    # PCA transform through matrix multiplication (projection to rotated coordinate system)
+    im_vec_pca = im_vec_norm @ W_pca
+    
+    # Reshape into image, and ensure that zero-value input pixels are also zero in output
+    im_pca = np.reshape(im_vec_pca,image.shape[0:2]+(im_vec_pca.shape[-1],))*nonzero_mask
+
+    return im_pca
+
