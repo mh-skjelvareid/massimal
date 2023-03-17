@@ -37,6 +37,12 @@ def percentile_stretch(image,percentiles=(2,98),separate_bands=True, ignore_zero
 
     # Preallocate output array
     im_rescaled = np.zeros_like(image)
+    
+    # Determine output range / dtype
+    if np.issubdtype(image.dtype,np.integer):
+        out_range = 'dtype'
+    else:
+        out_range = (0,1)  # Float
 
     # Create mask indicating non-zero pixels
     if ignore_zeros:
@@ -50,12 +56,12 @@ def percentile_stretch(image,percentiles=(2,98),separate_bands=True, ignore_zero
         # for ii in range(image.shape[2]):
         for ii,image_band in enumerate(np.moveaxis(image,2,0)):
             p_low,p_high = np.percentile(image_band[mask], percentiles)
-            im_rescaled[:,:,ii] = exposure.rescale_intensity(image_band, in_range=(p_low,p_high))
+            im_rescaled[:,:,ii] = exposure.rescale_intensity(image_band, in_range=(p_low,p_high),out_range=out_range)
 
     # Case: Stretch whole image based on "global" percentiles
     else:
         p_low,p_high = np.percentile(image[mask], percentiles)
-        im_rescaled = exposure.rescale_intensity( image, in_range=(p_low,p_high))
+        im_rescaled = exposure.rescale_intensity( image, in_range=(p_low,p_high),out_range=out_range)
 
     return im_rescaled
 
@@ -89,6 +95,12 @@ def absolute_stretch(image,limits):
 
     # Preallocate output array
     im_rescaled = np.zeros(image.shape)
+    
+    # Determine output range / dtype
+    if np.issubdtype(image.dtype,np.integer):
+        out_range = 'dtype'
+    else:
+        out_range = (0,1)  # Float
 
     # Case: Stretch bands separately
     if limits.size > 2:
@@ -96,10 +108,10 @@ def absolute_stretch(image,limits):
         assert limits.shape[0] == image.shape[2]
 
         for ii,image_band in enumerate(np.moveaxis(image,2,0)):
-            im_rescaled[:,:,ii] = exposure.rescale_intensity(image_band, in_range=(limits[ii,0],limits[ii,1]))
+            im_rescaled[:,:,ii] = exposure.rescale_intensity(image_band, in_range=(limits[ii,0],limits[ii,1]),out_range=out_range)
 
     # Case: Stretch whole image based on "global" limits
     else:
-        im_rescaled = exposure.rescale_intensity(image, in_range=(limits[0],limits[1]))
+        im_rescaled = exposure.rescale_intensity(image, in_range=(limits[0],limits[1]),out_range=out_range)
 
     return im_rescaled
