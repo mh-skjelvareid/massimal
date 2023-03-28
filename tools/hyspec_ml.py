@@ -262,7 +262,7 @@ def kfold_generator(dataset,k):
         validation_dataset = dataset.skip(i*samples_per_fold).take(samples_per_fold)
         # Merge parts before/after validation dataset to create training dataset
         training_dataset = dataset.take(i*samples_per_fold)
-        training_dataset = training_dataset.concatenate(dataset.skip((i+1)*samples_per_fold).take((k-i-1)*samples_per_fold))
+        training_dataset = training_dataset.concatenate(dataset.skip((i+1)*samples_per_fold)
         yield (training_dataset,validation_dataset)
         
         
