@@ -7,6 +7,7 @@ from skimage.morphology import disk
 import hyspec_io
 import cv2
 import math
+import tensorflow as tf
 
 class ImageVectorizer:
     """ Helper class for vectorizing and de-vectorizing image data for machine learning
@@ -228,3 +229,62 @@ def pca_transform_image(image,W_pca,X_mean,X_std=None):
 
     return im_pca
 
+
+def kfold_generator(dataset,k):
+    """ Generator for K-fold splitting into training and validation datasets
+    
+    # Arguments:
+    dataset    Tensorflow dataset
+    k          Number of folds (see https://scikit-learn.org/stable/modules/cross_validation.html)
+    
+    # Returns
+    training_dataset      Tensorflow dataset
+    validation_dataset    Tensorflow dataset
+    
+    # Notes:
+    The generator returns k sets of training and validation datasets when iterated over.
+    
+    # Example use:
+    dataset = tf.data.Dataset.from_tensor_slices((np.arange(9),np.arange(9)%3))
+    for data,label in dataset.as_numpy_iterator():
+        print(f'Data: {data}, label: {label}')
+    for training_dataset, validation_dataset in kfold_generator(dataset,3):
+        print('----')
+        for data,label in training_dataset.as_numpy_iterator():
+            print(f'Training data: {data}, label: {label}')
+        for data,label in validation_dataset.as_numpy_iterator():
+            print(f'Validation data: {data}, label: {label}')
+    """
+    n_datapoints = dataset.cardinality()
+    dataset = dataset.shuffle(n_datapoints,reshuffle_each_iteration=False)
+    samples_per_fold = n_datapoints//k
+    for i in range(k):
+        validation_dataset = dataset.skip(i*samples_per_fold).take(samples_per_fold)
+        # Merge parts before/after validation dataset to create training dataset
+        training_dataset = dataset.take(i*samples_per_fold)
+        training_dataset = training_dataset.concatenate(dataset.skip((i+1)*samples_per_fold).take((k-i-1)*samples_per_fold))
+        yield (training_dataset,validation_dataset)
+        
+        
+        
+def sample_weights_balanced(y):
+    """ Create sample weigths which are inversely proportional to class frequencies 
+    
+    # Arguments:
+    y        Numpy vector with (numerical) labels
+    
+    # Returns:
+    sample_weights  Numpy vector with same shape as y
+                    Classes with a low number of samples get higher weights
+                    See 'balanced' option in
+                    https://scikit-learn.org/stable/modules/generated/sklearn.utils.class_weight.compute_sample_weight.html
+    
+    # Notes
+    - Useful in combination with score() function for various classifiers,
+    to calculate a balanced score in case on unbalanced datasets
+    """
+    sample_weights = np.zeros(len(y),dtype=float)
+    for label in np.unique(y_val):
+        label_mask = (y_val == label)
+        sample_weights[label_mask] = len(y)/np.count_nonzero(label_mask)
+    return sample_weights
