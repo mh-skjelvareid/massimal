@@ -5,7 +5,7 @@ from skimage.morphology import binary_closing
 from skimage.morphology import disk
 
 import hyspec_io
-import cv2
+#import cv2  # Needed for inpaint - but cv2 not installed in all environments
 import math
 import tensorflow as tf
 
@@ -262,7 +262,7 @@ def kfold_generator(dataset,k):
         validation_dataset = dataset.skip(i*samples_per_fold).take(samples_per_fold)
         # Merge parts before/after validation dataset to create training dataset
         training_dataset = dataset.take(i*samples_per_fold)
-        training_dataset = training_dataset.concatenate(dataset.skip((i+1)*samples_per_fold)
+        training_dataset = training_dataset.concatenate(dataset.skip((i+1)*samples_per_fold))
         yield (training_dataset,validation_dataset)
         
         
