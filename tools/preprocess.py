@@ -8,6 +8,7 @@ import hyspec_io
 import misc
 import os
 import spectral
+import skimage.morphology
 
 
 # detect_saturated
@@ -74,7 +75,6 @@ def inpaint_masked(in_im, mask, inpaint_radius=3, inpaint_alg = 'ns'):
 
     # Convert image to float with single precision (32-bit), ensure 3D.
     # Note: .copy() needed to avoid modifying input image
-#    out_im = np.atleast_3d(np.single(in_im.copy()))
     out_im = np.atleast_3d(in_im.copy())
 
     # Convert mask to 8-bit unsigned array
@@ -93,11 +93,54 @@ def inpaint_masked(in_im, mask, inpaint_radius=3, inpaint_alg = 'ns'):
 
     # Loop over each image band and apply inpainting
     for ii in range(out_im.shape[2]):
-        print('Inpainting band ' + str(ii) + ' of ' + str(out_im.shape[2]),end="\r")
+        print('Inpainting band ' + str(ii+1) + ' of ' + str(out_im.shape[2]),end="\r")
         out_im[:,:,ii] = cv2.inpaint( out_im[:,:,ii],mask,inpaint_radius,alg_flag)
 
     # Return
     return out_im
+
+
+def inpaint_missing_pixels(image, inpaint_radius=3, binary_closing_radius=3, inpaint_alg='ns'):
+    """ Inpaint missing pixels in all bands of multiband image
+
+    # Arguments:
+    image:  2D or 3D image array. Multiband images are assumed to have bands
+            stacked along 3rd axis (axis = 2).
+
+    # Keyword arguments:
+    inpaint_radius:         "Radius of a circular neighborhood of each point inpainted
+                            that is considered by the algorithm." (from OpenCV doc.)
+    binary_closing_radius:  Radius of "footprint" used to fill holes (binary closing)
+                            A larger value will fill larger holes.
+    inpaint_alg:            Either 'ns' (default) or 'telea'. Correspond to two
+                            algorithms implemented in OpenCV.
+
+    # Returns:
+    inpainted_image: Output image with missing pixels inpainted.
+
+    # Notes:
+    This function detects missing pixels by first creating a mask of all-zero
+    pixels (across all bands) and then filling in the holes in the mask using
+    binary closing (see skimage.morphology.binary_closing). Only pixels corresponding
+    to filled-in holes are then inpainted using cv2.inpaint. This avoids inpainting
+    the whole image (typically, georeferenced images have large border areas with
+    zero-valued pixels).
+    """
+    
+    # Determine which pixels to inpaint
+    image = np.atleast_3d(image)
+    zero_mask = np.all(image==0,axis=2)
+    nonzero_mask_holes_filled = skimage.morphology.binary_closing(~zero_mask,
+                                    footprint=skimage.morphology.disk(radius=binary_closing_radius))
+    inpaint_mask = zero_mask & nonzero_mask_holes_filled
+
+    # Inpaint zero pixels inside image
+    inpainted_image = inpaint_masked(image, 
+                                     inpaint_mask, 
+                                     inpaint_radius=inpaint_radius, 
+                                     inpaint_alg = inpaint_alg)
+    return inpainted_image
+
 
 
 def remove_glint_flatspec(image,wl,nir_band=(780,840)):
