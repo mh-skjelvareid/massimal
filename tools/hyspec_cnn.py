@@ -291,3 +291,39 @@ def add_background_zero_weight(image, labels):
     sample_weights = tf.where(label_mask, ones, zeros)  # 
 
     return image, labels, sample_weights
+
+
+def unet_classify_single_image(unet,image):
+    """ Classify single image using UNet
+    
+    # Arguments:
+    unet:     Trained Unet model (Keras)
+    image:    Single image (3D Numpy array)
+    
+    # Returns
+    labels:     2D image with integer class labels, found by using
+                np.argmax() on unet output (which has one channel per class)
+    """
+    
+    # Get activations by running predict(), insert extra dimension for 1-element batch
+    activations = np.squeeze(unet.predict(np.expand_dims(image,axis=0)))
+    labels = np.argmax(activations,axis=2)
+    return labels
+
+
+def unet_classify_image_batch(unet,batch):
+    """ Classify image batch using UNet
+    
+    # Arguments:
+    unet:     Trained Unet model (Keras)
+    batch:    Batch of images (4D NumPy array)
+    
+    # Returns
+    labels:     3D array with integer class labels, found by using
+                np.argmax() on unet output (which has one channel per class)
+    """
+    
+    # Get activations by running predict(), use argmax to find class label
+    activations = unet.predict(batch)
+    labels = np.argmax(activations,axis=3)
+    return labels
