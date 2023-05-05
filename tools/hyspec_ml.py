@@ -1,13 +1,12 @@
 import numpy as np
-from sklearn.base import BaseEstimator
-
-from skimage.morphology import binary_closing
-from skimage.morphology import disk
-
+import sklearn.base
+import skimage.morphology
 import hyspec_io
-#import cv2  # Needed for inpaint - but cv2 not installed in all environments
+import cv2 
 import math
 import tensorflow as tf
+import numpy.random
+
 
 class ImageVectorizer:
     """ Helper class for vectorizing and de-vectorizing image data for machine learning
@@ -96,7 +95,7 @@ class ImageVectorizer:
 
 
 # Define class for using only a subset of wavelengths
-class WavelengthSelector(BaseEstimator):
+class WavelengthSelector(sklearn.base.BaseEstimator):
     """ Simple class for selecting a range of wavelength in a matrix
 
     # Usage:
@@ -179,13 +178,68 @@ def apply_classifier_to_image(classifier,image,fill_zeros=True):
 
     if fill_zeros:
         # Determine which pixels to inpaint
-        nonzero_mask_holes_filled = binary_closing(~zero_mask,footprint=disk(radius=3))
+        nonzero_mask_holes_filled = skimage.morphology.binary_closing(~zero_mask,footprint=skimage.morphology.disk(radius=3))
         inpaint_mask = zero_mask & nonzero_mask_holes_filled
 
         # Inpaint zero pixels inside image
         y_pred_im = cv2.inpaint(np.ubyte(y_pred_im),np.ubyte(inpaint_mask),inpaintRadius=3,flags=cv2.INPAINT_NS)
 
     return y_pred_im
+
+
+def save_pca_model(pca_model,X_notscaled,npz_filename,n_components = 'all'):
+    """ Save PCA weights and X mean and std as NumPy npz file
+    
+    # Arguments:
+    pca_model       sklearn.decomposition.PCA model which has beed fitted to (scaled) data X_scaled
+    X_notscaled     X array, mean value for each feature in X matrix (before scaling)
+    npz_filename    Path to *.npz file where data will be saved
+    n_components    Number of PCA components to include
+    
+    # Notes:
+    The function will save the following arrays to the npz. file:
+        - W_pca:  PCA "weights", shape (N_features, N_components)  
+        - X_mean: X mean values, shape (1,N_features,)
+        - X_std:  X standard deviations, shape (1,N_features)
+        - explained_variance_ratio, shape (N_components)
+    """
+    # If n_components specified, only use n first components
+    if n_components != 'all':
+        W_pca = np.transpose(pca_model.components_[0:n_components,:])
+        explained_variance_ratio = pca_model.explained_variance_ratio_[0:n_components]
+    else:
+        W_pca = np.transpose(pca_model.components_)
+        explained_variance_ratio = pca_model.explained_variance_ratio_
+        
+    # Save as npz file
+    np.savez(npz_filename,
+         W_pca = W_pca,
+         X_mean = np.mean(X_notscaled,axis=0),
+         X_std = np.std(X_notscaled,axis=0),
+         explained_variance_ratio = explained_variance_ratio)
+    
+
+def read_pca_model(npz_filename,include_explained_variance=False):
+    """ Load PCA weights and X mean and std from NumPy npz file
+    
+    # Arguments:
+    npz_filename    Path to *.npz file where data is saved
+    
+    # Returns:
+    W_pca:    PCA "weights", shape (N_features, N_components)  
+    X_mean:   X mean values, shape (1,N_features,)
+    X_std:    X standard deviations, shape (1,N_features)
+    explained_variance_ratio (if include_explained_variance = True)
+    """
+    return_list = []
+    with np.load('test.npz') as npz_files:
+        return_list.append(npz_files['W_pca'])
+        return_list.append(npz_files['X_mean'])
+        return_list.append(npz_files['X_std'])
+        if include_explained_variance:
+            return_list.append(npz_files['explained_variance_ratio'])
+        
+    return tuple(return_list)
 
 
 def pca_transform_image(image,W_pca,X_mean,X_std=None):
@@ -288,3 +342,41 @@ def sample_weights_balanced(y):
         label_mask = (y_val == label)
         sample_weights[label_mask] = len(y)/np.count_nonzero(label_mask)
     return sample_weights
+
+
+def random_sample_image(image,frac=0.05,ignore_zeros=True,replace=False):
+    """ Draw random samples from image
+
+    # Usage:
+    samp = random_sample_image(image,...)
+
+    # Required arguments:
+    image:  3D numpy array with hyperspectral image, wavelengths along
+            third axis (axis=2)
+
+    # Optional arguments:
+    frac:           Number of samples expressed as a fraction of the total
+                    number of samples in the image. Range: [0 - 1]
+    ignore_zeros:   Do not include samples that are equal to zeros across all
+                    bands.
+    replace:        Whether to select samples with or without replacement.
+
+    # returns
+    samp:   2D numpy array of size NxB, with N denoting number of samples and B
+            denoting number of bands.
+    """
+
+    # Create mask
+    if ignore_zeros:
+        mask = ~np.all(image==0,axis=2)
+    else:
+        mask = np.ones(image.shape[:-1],axis=2)
+
+    # Calculate number of samples
+    n_samp = np.int64(frac*np.count_nonzero(mask))
+
+    # Create random number generator
+    rng = numpy.random.default_rng()
+    samp = rng.choice(image[mask],size=n_samp,axis=0,replace=replace)
+
+    return samp
