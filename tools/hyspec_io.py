@@ -50,7 +50,7 @@ def load_envi_image(header_filename, image_filename=None, rgb_only=False):
     return (image,wl,rgb_ind,im_handle.metadata)
 
 
-def save_envi_image(header_filename,image,metadata,dtype = 'uint16', **kwargs):
+def save_envi_image(header_filename,image,metadata, dtype=None,**kwargs):
     """ Save ENVI file with parameters compatible with Spectronon
 
     # Usage:
@@ -67,10 +67,14 @@ def save_envi_image(header_filename,image,metadata,dtype = 'uint16', **kwargs):
     Optional arguments:
     dtype:      Data type for ENVI file. Follows numpy naming convention.
                 Typically 'uint16' or 'single' (32-bit float)
+                If None, dtype = image.dtype
     **kwargs:   Additional keyword arguments passed on to
                 spectral.envi.save_image()
     """
 
+    if dtype is None:
+        dtype = image.dtype
+    
     # Save file
     spectral.envi.save_image(header_filename,image,
         dtype=dtype, metadata=metadata, force=True, ext=None, **kwargs)
