@@ -260,6 +260,10 @@ class HedleySunGlint:
         # Returns:
         vis:    2D or 3D spectral data, limited to visible range, with sun
                 glint removed.
+
+        # Notes:
+        The indices for the wavelengths in the returned 'vis' cube are 
+        stored as an attribute ('vis_ind') of the HedleySunGlint object.
         """
 
         # Shape into 2D array, save original shape for later
