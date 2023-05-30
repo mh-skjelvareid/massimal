@@ -232,7 +232,7 @@ def read_pca_model(npz_filename,include_explained_variance=False):
     explained_variance_ratio (if include_explained_variance = True)
     """
     return_list = []
-    with np.load('test.npz') as npz_files:
+    with np.load(npz_filename) as npz_files:
         return_list.append(npz_files['W_pca'])
         return_list.append(npz_files['X_mean'])
         return_list.append(npz_files['X_std'])
