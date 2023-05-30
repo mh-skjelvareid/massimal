@@ -69,9 +69,9 @@ def hedley_remove_glint(input_dir,output_dir,train_cube_path,recursive_src = Fal
     print('Found ' + str(len(file_list)) + ' images in input folder.')
 
     # Loop over all input files
-    for input_file in file_list:
+    for input_file in tqdm.tqdm(file_list):
         # Load data
-        print('Loading input file ' + input_file)
+        #print('Loading input file ' + input_file)
         (im,wl,rgb_ind,metadata) = hyspec_io.load_envi_image(input_file)
 
         # Remove glint
