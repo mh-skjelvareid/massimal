@@ -36,7 +36,7 @@ def detect_saturated(image,sat_val=2**12-1,src_ax=2):
 
 
 # inpaint_masked
-def inpaint_masked(in_im, mask, inpaint_radius=3, inpaint_alg = 'ns'):
+def inpaint_masked(in_im, mask, inpaint_radius=3, inpaint_alg = 'ns', verbose=False):
     """ Inpaint masked pixels in all bands of multiband image
 
     # Usage:
@@ -54,6 +54,7 @@ def inpaint_masked(in_im, mask, inpaint_radius=3, inpaint_alg = 'ns'):
                     Default: 3
     inpaint_alg:    Either 'ns' (default) or 'telea'. Correspond to two
                     algorithms implemented in OpenCV.
+    verbose:        Print update for each image band processed
 
     # Returns:
     out_im: Output image with masked pixels inpainted.
@@ -93,7 +94,7 @@ def inpaint_masked(in_im, mask, inpaint_radius=3, inpaint_alg = 'ns'):
 
     # Loop over each image band and apply inpainting
     for ii in range(out_im.shape[2]):
-        print('Inpainting band ' + str(ii+1) + ' of ' + str(out_im.shape[2]),end="\r")
+        if verbose: print('Inpainting band ' + str(ii+1) + ' of ' + str(out_im.shape[2]),end="\r")
         out_im[:,:,ii] = cv2.inpaint( out_im[:,:,ii],mask,inpaint_radius,alg_flag)
 
     # Return
