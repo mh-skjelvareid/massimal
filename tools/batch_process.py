@@ -269,7 +269,8 @@ def underwater_image_correction(input_dirs, output_dirs,
     # Arguments:
     input_dirs:    List of input directories containing images to be corrected (strings)
     output_dirs:   List of output directories for saving corrected images (strings)
-                   (must be same length as input_dirs)
+                   (must be same length as input_dirs). If the directory does not exist, 
+                   it will be created.
                    
     # Keyword arguments:
     file_ext:        Image file extension as string (default 'jpg')
@@ -284,9 +285,13 @@ def underwater_image_correction(input_dirs, output_dirs,
     """
     
     for input_dir, output_dir in zip(input_dirs, output_dirs):
+        if not pathlib.Path(input_dir).exists():
+            print(f'WARNING: Input directory {input_dir} does not exist - skipping.')
+            continue
         input_files = misc.file_pattern_search(input_dir,'*.'+file_ext)
         print(f'Processing {len(input_files)} images in {input_dir}:')
         output_dir_path = pathlib.Path(output_dir)
+        output_dir_path.mkdir(parents=True,exist_ok=True) # Create output dir if not already existing
         for file in tqdm.tqdm(input_files):
             image = skimage.io.imread(file)
             image_corrected = image_render.percentile_stretch(image,
