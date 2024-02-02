@@ -2,7 +2,7 @@
  A collection of code related to the Massimal research project on UAV hyperspectral imaging of underwater vegetation.
 
 ## Installation
-This code is still in development and has not  been organized and prepared for widespread distribution. However, if you do want to run parts of this code, you can find requirements in the [requirements_python.txt](requirements_python.txt) and [requirements_other.txt](requirements_other.txt) files. 
+This code is still in development and has not  been organized and prepared for widespread distribution. However, if you do want to run parts of this code, you can find requirements in the [requirements_python.txt](requirements_python.txt) and [requirements_other](requirements_other.md) files. 
 
 The requirements are quite loosely defined, with few limits on version numbers, as no obvious version conflicts have been detected yet. If you come across problems regarding package versions, please submit an [issue](https://github.com/mh-skjelvareid/massimal/issues) describing it. 
 
@@ -20,7 +20,7 @@ Note that pip is installed when the environment is created. Some of the python p
 
     pip install -r requirements_python.txt
 
-The requirements listed in [requirements_other.txt](requirements_other.txt) must be installed manually.
+The requirements listed in [requirements_other](requirements_other.md) must be installed manually.
 
 When managing conda environments, the following commands for listing, renaming and removing environments may also be useful:
 
