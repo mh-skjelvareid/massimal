@@ -22,6 +22,12 @@ Note that pip is installed when the environment is created. Some of the python p
 
 The requirements listed in [requirements_other.txt](requirements_other.txt) must be installed manually.
 
+When managing conda environments, the following commands for listing, renaming and removing environments may also be useful:
+
+    conda env list
+    conda rename -n old_name new_name
+    conda env remove --name env_name
+
 ## Website
 The [Massimal website](https://en.uit.no/project/massimal) has information about the project, it's members, publications etc.
 
