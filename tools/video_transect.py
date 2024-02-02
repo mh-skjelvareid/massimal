@@ -5,9 +5,10 @@ import geopandas
 import warnings
 import misc
 import numpy as np
-import datetime
+import datetime, timezone
 from pathlib import Path
 from tqdm import tqdm
+import exiftool
 
 # Suppress "future" warnings (issue with shapely / geopandas)
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -283,7 +284,7 @@ def extract_images_from_video(gdf,image_dir):
     return gdf
 
 
-def filter_gdf_on_distance(gdf,sample_distance,epsg=32633, inplace=False, outlier_distance = 1000):
+def filter_gdf_on_distance(gdf,sample_distance,epsg=32633, outlier_distance = 1000):
     """ Filter a geodataframe by only including new samples if position has changed
     
     # Usage:
@@ -321,3 +322,63 @@ def filter_gdf_on_distance(gdf,sample_distance,epsg=32633, inplace=False, outlie
     
     # Return a filtered copy of the original geodataframe
     return gdf.iloc[mask]
+
+
+def get_image_timestamps(image_paths):
+    """ Get subsecond-accuracy timestamps for every image file in a list
+    
+    # Input parameters:
+    image_paths:
+        List of image paths, used by exiftool method ExifToolHelper.get_metadata()
+    
+    # Returns:
+    image_paths_and_timestamps:
+        List of tuples containing (image_path, image_timestamp_string)
+    """
+    with exiftool.ExifToolHelper() as et:
+        metadata = et.get_metadata(image_paths)
+    image_paths_and_timestamps = [(im_file,md['Composite:SubSecCreateDate']) 
+                                  for (im_file,md) in zip(image_paths,metadata) 
+                                  if 'Composite:SubSecCreateDate' in md]
+    return image_paths_and_timestamps
+
+
+def get_otter_image_positions(otter_gdf,image_paths_and_timestamps,
+                              dt_format = r'%Y:%m:%d %H:%M:%S.%f',
+                              time_tolerance = datetime.timedelta(seconds=1)):
+    """ Search Otter geodataframe for positions closest to image (in time)
+    
+    # Input arguments:
+    otter_gdf:      
+        GDF created from Otter CSV (see otter_csv_to_geodataframe())
+        Only column "Time" (containing UTC datetime objects) is used
+    image_paths_and_timestamps:
+        List of tuples containing (image_path, image_timestamp_string)
+    
+    # Returns
+    image_gdf:
+    
+    """
+
+    # TODO: Test this function!
+    
+    # Extract timestamps and convert to datetime objects
+    image_datetimes = [pd.to_datetime(dt,format=dt_format,utc=True) for (_,dt) in image_paths_and_timestamps]
+
+    # Find indices for Otter timestamps that are closest to image timestamps
+    closest_time_index = pd.Index(otter_gdf['Time']).get_indexer(image_datetimes,method='nearest',
+                                                                 tolerance=time_tolerance)
+    
+    # Remove images that don't have any matches within the time tolerance
+    image_paths = [p for ((p,_),im_index) in zip(image_paths_and_timestamps,closest_time_index)
+                   if im_index >= 0] # Images without match get index -1
+    closest_time_index = closest_time_index[closest_time_index>=0]
+    assert len(image_paths) == len(closest_time_index)
+
+    # Create copy of Otter gdf which only contains rows corresponding to images
+    image_gdf = otter_gdf.iloc[closest_time_index]
+    
+    # Insert additional column for image path
+    image_gdf.insert(image_gdf.shape[1]-1,'ImageFile','')
+    image_gdf['ImageFile'] = image_paths
+
