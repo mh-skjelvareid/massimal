@@ -337,7 +337,7 @@ def get_image_timestamps(image_paths):
     """
     with exiftool.ExifToolHelper() as et:
         metadata = et.get_metadata(image_paths)
-    image_paths_and_timestamps = [(im_file,md['Composite:SubSecCreateDate']) 
+    image_paths_and_timestamps = [(im_file.name,md['Composite:SubSecCreateDate']) 
                                   for (im_file,md) in zip(image_paths,metadata) 
                                   if 'Composite:SubSecCreateDate' in md]
     return image_paths_and_timestamps
@@ -380,5 +380,7 @@ def get_otter_image_positions(otter_gdf,image_paths_and_timestamps,
     
     # Insert additional column for image path
     image_gdf.insert(image_gdf.shape[1]-1,'ImageFile','')
-    image_gdf['ImageFile'] = image_paths
+    image_gdf.iloc[:,image_gdf.columns.get_loc('ImageFile')] = image_paths
+
+    return image_gdf
 
