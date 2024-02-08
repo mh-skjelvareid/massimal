@@ -5,7 +5,7 @@ import geopandas
 import warnings
 import misc
 import numpy as np
-import datetime, timezone
+import datetime
 from pathlib import Path
 from tqdm import tqdm
 import exiftool
