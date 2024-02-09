@@ -5,6 +5,7 @@ matplotlib
 numpy<2.0
 scipy
 tensorflow-cpu
+pydot
 scikit-learn
 scikit-learn-intelex
 imbalanced-learn
