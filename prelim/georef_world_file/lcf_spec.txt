@@ -1,0 +1,101 @@
+Massimal:
+This specification was sent via email by Casey Smith at Resonon on February 16. 2021
+********
+
+Times Files Specification
+*************************
+
+Files with *.times* suffix
+
+Time stamps for each line of image data.  It is assumed that the first line of image data, the timestamp on the first
+line of the times file, and the first line of lcf data, are all recorded at the exact same moment.  Thus, the time
+stamp of the first line of lcf data can be subtracted from the rest to convert to time relative to the beginning, and
+the timestamp of the first line of image data can also be subtracted for the same reason.
+
+After subtracting their first timestamp, all time stamps are relative to the beginning (zero) and can be interpolated
+from there.  This interpolation step is done with Space Computer's georeg software.  It is necessary to interpolate
+the gpsimu data because the recording frequency of the gps-imu and the imager are most likely different.  For example,
+an imager often records at 120Hz, while the piccolo gps-imu records at 50Hz.  To correctly locate an image line on the
+ground, we must interpolate the gps-imu positions to match the times when image lines were acquired.
+
+
+LCF files
+
+***********
+
+
+
+Files with *.lcf* suffix.  aka. *Location Files* or *GPS-IMU data files*
+
+
+
+LCF files are space delimited text files with 11 columns of data.  Each line will look something like this::
+
+
+
+	39016858790.0 -0.0289063915483 0.0065914242751 -3.06613882225 9.34582202599e-06 6.91507013402e-07 589.011841596 0 0 5
+
+
+
+The LCF spec was inherited from Space Computer Corp.  This spec controls the first 10 columns of data.  Columns past 10 are at the discretion of the file writer to use.  For the PCAQ, the content of these columns will depend on the GPU/IMU system.
+
+
+
+**For all systems**. the first 10 columns are:
+
+
+
+- Column 1:  **system time** in seconds
+
+- Column 2:  **roll** angle in radians, positive for right wing up
+
+- Column 3:  **pitch** angle in radians, positive nose up
+
+- Column 4:  **heading** or yaw in radians, zero at due North, PI/2 at due East
+
+- Column 5:  GPS **longitude** in degrees, negative for west longitude
+
+- Column 6:  GPS **latitude** in degrees, negative for southern hemisphere
+
+- Column 7:  GPS **altitude**, in meters above the WGS-54 ellipsoid
+
+- Column 8:  0, (number zero) place holder for future use
+
+- Column 9:  0, (number zero) place holder for future use 
+
+- Column 10:  5 = Use, 0 = Do Not Use.  Message to GeoReg to use this line for georectification.  (Currently Always set 5.)
+
+
+
+The following columns are output by **Piccolo** GPS-IMU, and subject to change
+
+
+
+- Column 11:  GPS.year,
+
+- Column 12:  GPS.month,
+
+- Column 13:  GPS.day,
+
+- Column 14:  GPS.hours,
+
+- Column 15:  GPS.minutes,
+
+- Column 16:  GPS.seconds,
+
+- Column 17:  PCAQ CPU timestamp seconds
+
+- Column 18:  PCAQ CPU timestamp microseconds
+
+
+
+
+
+The following columns are output by **Athena** GPS-IMU, and subject to change
+
+
+
+- Column 11:	Satellite Count
+
+
+
