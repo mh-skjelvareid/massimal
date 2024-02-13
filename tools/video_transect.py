@@ -9,6 +9,7 @@ import datetime
 from pathlib import Path
 from tqdm import tqdm
 import exiftool
+import shutil
 
 # Suppress "future" warnings (issue with shapely / geopandas)
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -337,15 +338,16 @@ def get_image_timestamps(image_paths):
     """
     with exiftool.ExifToolHelper() as et:
         metadata = et.get_metadata(image_paths)
-    image_paths_and_timestamps = [(im_file.name,md['Composite:SubSecCreateDate']) 
-                                  for (im_file,md) in zip(image_paths,metadata) 
+    image_paths_and_timestamps = [(im_path,md['Composite:SubSecCreateDate']) 
+                                  for (im_path,md) in zip(image_paths,metadata) 
                                   if 'Composite:SubSecCreateDate' in md]
     return image_paths_and_timestamps
 
 
 def get_otter_image_positions(otter_gdf,image_paths_and_timestamps,
                               dt_format = r'%Y:%m:%d %H:%M:%S.%f',
-                              time_tolerance = datetime.timedelta(seconds=1)):
+                              time_tolerance = datetime.timedelta(seconds=1),
+                              image_time_offset_from_utc = datetime.timedelta(hours=2)):
     """ Search Otter geodataframe for positions closest to image (in time)
     
     # Input arguments:
@@ -354,26 +356,34 @@ def get_otter_image_positions(otter_gdf,image_paths_and_timestamps,
         Only column "Time" (containing UTC datetime objects) is used
     image_paths_and_timestamps:
         List of tuples containing (image_path, image_timestamp_string)
+    time_tolerance:
+        datetime.timedelta, default 1 second, indicating maximum time offset
+        when searching for matching times between images and positions
+    image_time_offset_from_utc:
+        datetime.timedelta, default 2 hours, indicating time offset between
+        utc and image timestamps (typically local time).
     
     # Returns
     image_gdf:
+        Geodataframe with positions (taken form Otter) and corresponding
+        image file paths. 
     
     """
-
-    # TODO: Test this function!
     
     # Extract timestamps and convert to datetime objects
-    image_datetimes = [pd.to_datetime(dt,format=dt_format,utc=True) for (_,dt) in image_paths_and_timestamps]
+    image_datetimes = [pd.to_datetime(image_datetime_str,format=dt_format,utc=True) 
+                       - image_time_offset_from_utc
+                       for (_,image_datetime_str) in image_paths_and_timestamps]
 
     # Find indices for Otter timestamps that are closest to image timestamps
     closest_time_index = pd.Index(otter_gdf['Time']).get_indexer(image_datetimes,method='nearest',
                                                                  tolerance=time_tolerance)
     
     # Remove images that don't have any matches within the time tolerance
-    image_paths = [p for ((p,_),im_index) in zip(image_paths_and_timestamps,closest_time_index)
+    image_paths = [image_path for ((image_path,_),im_index) in 
+                   zip(image_paths_and_timestamps,closest_time_index)
                    if im_index >= 0] # Images without match get index -1
     closest_time_index = closest_time_index[closest_time_index>=0]
-    assert len(image_paths) == len(closest_time_index)
 
     # Create copy of Otter gdf which only contains rows corresponding to images
     image_gdf = otter_gdf.iloc[closest_time_index]
@@ -381,6 +391,58 @@ def get_otter_image_positions(otter_gdf,image_paths_and_timestamps,
     # Insert additional column for image path
     image_gdf.insert(image_gdf.shape[1]-1,'ImageFile','')
     image_gdf.iloc[:,image_gdf.columns.get_loc('ImageFile')] = image_paths
-
     return image_gdf
 
+
+def copy_rename_georeferenced_images(gdf,output_dir,image_filename_base,include_full_path_in_gdf=False):
+    """ Copy and rename image files in geodataframe
+    
+    # Arguments:
+    gdf:
+        GeoDataFrame with columns "Time" (datetime) and "ImageFile" (pathlib.Path)
+        ImageFile paths are assumed to be absolute.
+    output_dir:
+        Output directory which files will be copied to.
+    image_filename_base:
+        String with filename base for new filenames.
+        Typically location (e.g. 'Smola_Skalmen_) or some other information
+        which is common for all images.
+    include_full_path_in_gdf:
+        Boolean. If True, geodataframe is updated with full path to new files
+        If False (default), only filename is inserted in ImagePath column
+        in updated geodataframe.
+
+    Images are given new names on the following format:
+    <image_filename_base>_<ImageNumber>_<ImageDateTime>_<OriginalFileName>
+
+    # Returns:
+    updated_gdf:
+        Copy of gdf, with ImageFile updated with new file name / path.
+    """
+    # Create new file names based on old filenames and timestamps
+    im_paths = gdf.ImageFile
+    im_times = gdf.Time
+    new_image_filenames = []
+    for i,(im_path,im_time) in enumerate(zip(im_paths,im_times)):
+        new_image_filename = image_filename_base
+        new_image_filename += f'{i:08d}_'
+        new_image_filename += im_time.strftime("%Y%m%dT%H%M%SZ_")
+        new_image_filename += im_path.name
+        new_image_filenames.append(new_image_filename)
+
+    # Create output directory (if not already present), copy and rename files
+    output_dir.mkdir(exist_ok=True,parents=True)
+    print(f'Renaming and copying {len(new_image_filenames)} files to {output_dir}...')
+    for source_file,new_filename in tqdm(zip(gdf.ImageFile,new_image_filenames)):
+        destination_file = output_dir / new_filename
+        shutil.copy(source_file,destination_file)
+
+    # Update path to image in geodataframe
+    updated_gdf = gdf.copy()
+    if include_full_path_in_gdf:
+        full_new_image_filenames = [str(output_dir / new_image_filename) for 
+                                    new_image_filename in new_image_filenames]
+        updated_gdf.iloc[:,updated_gdf.columns.get_loc('ImageFile')] = full_new_image_filenames
+    else:
+        updated_gdf.iloc[:,updated_gdf.columns.get_loc('ImageFile')] = new_image_filenames
+    return updated_gdf
