@@ -312,8 +312,8 @@ def filter_gdf_on_distance(gdf,sample_distance,epsg=32633, outlier_distance = 10
         
     # Iterate over all positions, and only include a new point if position 
     # has changed more than sample_distance
-    mask = [0]           # Always include first point
-    last_pos = geom[0]   # Position at first point
+    mask = [0]              # Always include first point
+    last_pos = geom.iloc[0] # Position at first point
     for index, position in enumerate(geom):
         dist = position.distance(last_pos)
         if (dist > sample_distance) and (dist < outlier_distance):
