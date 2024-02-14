@@ -336,7 +336,7 @@ def get_image_timestamps(image_paths):
     image_paths_and_timestamps:
         List of tuples containing (image_path, image_timestamp_string)
     """
-    with exiftool.ExifToolHelper() as et:
+    with exiftool.ExifToolHelper(check_execute=False) as et:
         metadata = et.get_metadata(image_paths)
     image_paths_and_timestamps = [(im_path,md['Composite:SubSecCreateDate']) 
                                   for (im_path,md) in zip(image_paths,metadata) 
