@@ -112,6 +112,41 @@ def otter_csv_to_geodataframe(csv_file):
     return gdf
 
 
+def yx_csv_to_geodataframe(csv_file,time_column_name='Time'):
+    """ Read position and timestamp from "YX" CSV file (e.g. exported from QGIS)
+
+    # Usage:
+    xy_csv_to_geodataframe(csv_file)
+
+    # Required arguments:
+    csv_file:   CSV file with track data
+                Columns "Y" and "X" and used, in addition to time column
+                with label given by keyword argument time_column_name
+
+    # Keyword arguments:
+    time_column_name:  String representing column name (header) for time in CSV file
+
+    # Returns
+    gdf:        GeoDataFrame with information extracted from CSV file
+                Columns are renamed "Lat", "Lng" and "Time"
+
+    """
+
+    # Read data
+    data = pd.read_csv(csv_file,usecols=['Y','X',time_column_name])
+    data.columns = ['Lat','Lng','Time']                   # Rename columns
+    data.Time = pd.to_datetime(data.Time,utc=True)        # Convert time string to datetime format
+
+    # Create GeoDataFrame
+    gdf = geopandas.GeoDataFrame(
+        data,
+        crs = 'EPSG:4326',
+        geometry=geopandas.points_from_xy(data.Lng, data.Lat))
+
+    # Return
+    return gdf
+
+
 def sec_to_timestring(sec):
     """ Convert number of seconds (numeric) into formatted string with minutes
 
@@ -135,7 +170,7 @@ def sec_to_timestring(sec):
     return timestring
 
 
-def get_video_data(video_dir, tz='Europe/Oslo'):
+def get_video_data(video_dir, tz='Europe/Oslo',video_time_offset = pd.Timedelta(0)):
     """ Get info about videos in folder, organized as dataframe
 
     # Usage:
@@ -148,10 +183,14 @@ def get_video_data(video_dir, tz='Europe/Oslo'):
                     according to recording order.
     
     # Keyword arguments:
-    tz              Timezone for video. Default: 'Europe/Oslo'
-                    To see available options:
-                    > import pytz
-                    > print(pytz.common_timezones)
+    tz                  Timezone for video. Default: 'Europe/Oslo'
+                        To see available options:
+                        > import pytz
+                        > print(pytz.common_timezones)
+    video_time_offset:  Time offset (pandas.Timedelta) to add to times 
+                        extracted from video files.
+                        If a time is e.g. 15:00 and should be 16:00,
+                        set video_time_offset = pandas.Timedelta(hours=1)
 
     # Returns:
     video_data:     Pandas dataframe with columns
@@ -177,7 +216,7 @@ def get_video_data(video_dir, tz='Europe/Oslo'):
         probe_data = ffmpeg.probe(file)
         video_data.loc[ii,'CreationTime'] = pd.to_datetime( \
             probe_data['streams'][0]['tags']['creation_time']). \
-            tz_localize(None).tz_localize(tz)  # "Reset" to no timezone, then set timezone
+            tz_localize(None).tz_localize(tz) + video_time_offset # "Reset" to no timezone, then set timezone. Add offset.
         video_data.loc[ii,'DurationSec'] = pd.to_numeric(probe_data['streams'][0]['duration'])
     
     # Calculate start and stop times for each video in seconds, relative to start of video
