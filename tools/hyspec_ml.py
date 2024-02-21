@@ -338,8 +338,8 @@ def sample_weights_balanced(y):
     to calculate a balanced score in case on unbalanced datasets
     """
     sample_weights = np.zeros(len(y),dtype=float)
-    for label in np.unique(y_val):
-        label_mask = (y_val == label)
+    for label in np.unique(y):
+        label_mask = (y == label)
         sample_weights[label_mask] = len(y)/np.count_nonzero(label_mask)
     return sample_weights
 
