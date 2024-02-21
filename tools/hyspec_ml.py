@@ -198,17 +198,17 @@ def save_pca_model(pca_model,X_notscaled,npz_filename,n_components = 'all'):
     
     # Notes:
     The function will save the following arrays to the npz. file:
-        - W_pca:  PCA "weights", shape (N_features, N_components)  
-        - X_mean: X mean values, shape (1,N_features,)
-        - X_std:  X standard deviations, shape (1,N_features)
+        - W_pca:  PCA "weights", shape (N_components, N_features)  
+        - X_mean: X mean values, shape (N_features,)
+        - X_std:  X standard deviations, shape (N_features)
         - explained_variance_ratio, shape (N_components)
     """
     # If n_components specified, only use n first components
     if n_components != 'all':
-        W_pca = np.transpose(pca_model.components_[0:n_components,:])
+        W_pca = pca_model.components_[0:n_components,:]
         explained_variance_ratio = pca_model.explained_variance_ratio_[0:n_components]
     else:
-        W_pca = np.transpose(pca_model.components_)
+        W_pca = pca_model.components_
         explained_variance_ratio = pca_model.explained_variance_ratio_
         
     # Save as npz file
@@ -226,7 +226,7 @@ def read_pca_model(npz_filename,include_explained_variance=False):
     npz_filename    Path to *.npz file where data is saved
     
     # Returns:
-    W_pca:    PCA "weights", shape (N_features, N_components)  
+    W_pca:    PCA "weights", shape (N_components, N_features)  
     X_mean:   X mean values, shape (1,N_features,)
     X_std:    X standard deviations, shape (1,N_features)
     explained_variance_ratio (if include_explained_variance = True)
@@ -247,7 +247,7 @@ def pca_transform_image(image,W_pca,X_mean,X_std=None):
     
     # Arguments:
     image       NumPy array with 3 dimensions (n_rows,n_cols,n_channels)
-    W_pca       PCA weight matrix with 2 dimensions (n_channels,n_components)
+    W_pca       PCA weight matrix with 2 dimensions (n_components, n_channels)
     X_mean      Mean value vector, to be subtracted from data ("centering")
                 Length (n_channels,)
     
@@ -276,7 +276,7 @@ def pca_transform_image(image,W_pca,X_mean,X_std=None):
         im_vec_norm = im_vec_norm/X_std
 
     # PCA transform through matrix multiplication (projection to rotated coordinate system)
-    im_vec_pca = im_vec_norm @ W_pca
+    im_vec_pca = im_vec_norm @ W_pca.T
     
     # Reshape into image, and ensure that zero-value input pixels are also zero in output
     im_pca = np.reshape(im_vec_pca,image.shape[0:2]+(im_vec_pca.shape[-1],))*nonzero_mask
