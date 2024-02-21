@@ -4,11 +4,8 @@
 import cv2
 import numpy as np
 from sklearn.linear_model import LinearRegression
-import hyspec_io
-import misc
-import os
-import spectral
 import skimage.morphology
+from scipy.signal import savgol_filter
 
 
 # detect_saturated
@@ -302,3 +299,8 @@ class HedleySunGlint:
 
         # Return
         return vis
+
+
+def filter_image_savitzky_golay(image,window_length=13,polyorder=3,axis=2):
+    """ Filter hyperspectral image using Savitzky-Golay filter with default arguments """
+    return savgol_filter(image,window_length=window_length,polyorder=polyorder,axis=axis)
