@@ -136,7 +136,7 @@ def envi_rgb_render(input_dir,output_dir=None,limits=None,recursive_src=False,in
     # Optional arguments:
     output_dir:     Directory for saving output image files. If None, files are
                     saved in input directory.
-    limits:         Limits for stretch, see misc.absolute_stretch
+    limits:         Limits for stretch, see image_render.absolute_stretch
                     If not specified, each image will be stretched to its
                     (2,92) percentiles, separatey for each R,G,B band
     recursive_src:  Whether to search the input_dir recursively
