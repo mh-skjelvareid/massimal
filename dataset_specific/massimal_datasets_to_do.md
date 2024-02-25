@@ -11,9 +11,11 @@ Tasks are organized according to the same structure as the datasets (Location ->
     - [ ] Read Garmin CSV file
     - [ ] Check time zone GPS vs video
     - [ ] Interpolate CSV to denser set of points (approx 1 per meter). See [Pandas](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.interpolate.html) or [SciPy](https://docs.scipy.org/doc/scipy/reference/interpolate.html) interpolation methods. See also [gpx_interpolate](https://github.com/remisalmon/gpx-interpolate/blob/master/gpx_interpolate.py) using pchip_interpolate(). Note that y_input can be a 2D array, not only a vector.
-- [ ] Use PCA for localized sun glint correction
-    - [ ] Write function for applying learned PCA for sun glint correction of image
-    - [ ] Write function for collecting (random) spectra from set of images and fitting PCA model to these
+- [x] Use PCA for localized sun glint correction
+    - [x] Write function for applying learned PCA for sun glint correction of image
+    - [x] Write function for collecting (random) spectra from set of images and fitting PCA model to these
+- [ ] Write code to export RGB images as PNG with transparency layer (useful for display in QGIS)
+    
 
 
 ## Smøla
