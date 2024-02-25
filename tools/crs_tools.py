@@ -54,8 +54,8 @@ def convert_long_lat_to_utm(long,lat,return_utm_epsg=False):
     Returns:
     UTMx:
         UTM x coordinate ("Easting"), scalar or array
-    UTMx:
-        UTM x coordinate ("Easting"), scalar or array
+    UTMy:
+        UTM y coordinate ("Northing"), scalar or array
     UTM_epsg (only if return_utm_epsg=True):
         EPSG code (integer) for UTM zone    
     """
