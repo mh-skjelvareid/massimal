@@ -18,3 +18,4 @@ pyexiftool
 pandas
 geopandas
 h5py
+rasterio
