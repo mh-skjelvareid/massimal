@@ -70,7 +70,7 @@ def convert_long_lat_to_utm(long,lat,return_utm_epsg=False):
     )
     utm_crs = pyproj.CRS.from_epsg(utm_crs_list[0].code)
     proj = pyproj.Proj(utm_crs)
-    UTMx, UTMy = proj(lcf_long,lcf_lat)
+    UTMx, UTMy = proj(long,lat)
     if return_utm_epsg:
         return UTMx, UTMy, utm_crs.to_epsg()
     else:
