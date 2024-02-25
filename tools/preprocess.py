@@ -141,7 +141,7 @@ def inpaint_missing_pixels(image, inpaint_radius=3, binary_closing_radius=3, inp
 
 
 
-def remove_glint_flatspec(image,wl,nir_band=(780,840)):
+def remove_glint_flatspec(image,wl,nir_band=(780,840),ignore_band=(753,773)):
     """ Remove sun/sky glint assuming flat glint spectrum
 
     # Usage:
@@ -152,9 +152,14 @@ def remove_glint_flatspec(image,wl,nir_band=(780,840)):
     wl:     1D array of wavelenghs (numeric)
 
     # Optional arguments:
-    nir_band:   2-element tuple with upper and lower limit of NIR band
-                The average value of the NIR band is subtracted from the
-                original image.
+    nir_band:   
+        2-element tuple with upper and lower limit of NIR band.
+        The average value of the NIR band is subtracted from the
+        original image.
+    ignore_band:
+        2-element tuple with upper and lower limit of band to be ignored.
+        Typically used to remove distorition caused by mismatch between
+        hyperspectral imager and downwelling point sensor.
 
     # Returns:
     image_noglint:  Hyperspectral image with estimated glint subtracted.
@@ -162,7 +167,8 @@ def remove_glint_flatspec(image,wl,nir_band=(780,840)):
     """
 
     # Calculated wavelength indices of NIR band
-    nir_ind = (wl > nir_band[0]) & (wl < nir_band[1])
+    ignore_ind = (wl > ignore_band[0]) & (wl < ignore_band[1])
+    nir_ind = (wl > nir_band[0]) & (wl < nir_band[1]) & (~ignore_ind)
 
     # Subtract average NIR value from all of image.
     mean_nir = np.mean(image[:,:,nir_ind], axis=2, keepdims=True)
