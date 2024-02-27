@@ -26,10 +26,7 @@ Some parent classes currently have only one child class. In this case, only one 
     4. Coralline algae 
         1. Maerl
     5. Turf
-3. Animals
-    1. Mussels
-        1. Mytilus edilus
-4. Substrate
+3. Substrate
     1. Rock
         1. Bedrock
         2. Boulder
@@ -38,6 +35,10 @@ Some parent classes currently have only one child class. In this case, only one 
     2. Sediment
         1. Sand
         2. Mud
+4. Animals
+    1. Mussels
+        1. Mytilus edilus
+
 
 
 ## Attributes
