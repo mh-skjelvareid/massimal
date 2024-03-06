@@ -9,21 +9,26 @@ Some parent classes currently have only one child class. In this case, only one 
 2. Algae
     1. Brown algae
         1. Kelp
-            1. Laminaria
-            2. Saccharina latissima
-            3. Alaria esculenta
+            1. Laminaria hyperbores
+            2. Laminaria digitata
+            3. Sacchoriza polyides
+            4. Saccharina latissima
+            5. Alaria esculenta
         2. Rockweed
-            1. Fucus vesiculosus
-            2. Fucus serratus
-            3. Fucus spiralis
-            4. Pelvetia canaliculata
-            5. Halidrys siliquosa
-            6. Desmarestia aculeata
+            1. Hydrolittoral
+                1. Ascophyllum nodosum
+                2. Fucus vesiculosus
+                3. Fucus serratus
+                4. Halidrys siliquosa
+            2. Geolittoral 
+                1. Fucus spiralis
+                2. Pelvetia canaliculata
         3. Other brown algae
-            1. Chorda filum
+            1. Chorda filum 
+            2. Desmarestia aculeata
     2. Green algae
     3. Red algae
-    4. Coralline algae 
+    4. Coralline red algae 
         1. Maerl
     5. Turf
 3. Substrate
@@ -38,6 +43,8 @@ Some parent classes currently have only one child class. In this case, only one 
 4. Animals
     1. Mussels
         1. Mytilus edilus
+5. Human activity
+    1. Trawl tracks
 
 
 
@@ -57,3 +64,8 @@ Some parent classes currently have only one child class. In this case, only one 
 - **Age**: 
     - Indication of vegetation age. Used as a general numerical attribute. Exact meaning must be defined for each use case (e.g. age expressed as number of years old).
     - Relevant for young kelp in trawled areas 
+- **Trawl track age**
+- **Trawl track vegetation**
+- **Turf underlying vegetation**
+- **Periphyton**
+    - Relevant for seagrass in Sandsund
