@@ -9,7 +9,7 @@ Some parent classes currently have only one child class. In this case, only one 
 2. Algae
     1. Brown algae
         1. Kelp
-            1. Laminaria hyperbores
+            1. Laminaria hyperborea
             2. Laminaria digitata
             3. Sacchoriza polyides
             4. Saccharina latissima
@@ -69,3 +69,5 @@ Some parent classes currently have only one child class. In this case, only one 
 - **Turf underlying vegetation**
 - **Periphyton**
     - Relevant for seagrass in Sandsund
+- **Corralina officinalis abundance***
+    - Ralavant for bedrock (Søla)
