@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "massimaltools"
+version = "2024.4"
+dependencies = [
+  "numpy<2.0",
+  "scipy",
+  "tensorflow",
+  "scikit-learn",
+  "scikit-learn-intelex",
+  "imbalanced-learn",
+  "scikit-image",
+  "opencv-python-headless",
+  "spectral",
+  "tqdm",
+  "h5py"
+]
+
+requires-python = ">=3.8"
+authors = [
+  {name = "Martin H. Skjelvareid"},
+]
+maintainers = [
+  {name = "Martin H. Skjelvareid"}
+]
+description = "A selection of tools for processing data collected in the MASSIMAL project, including hyperspectral images of shallow-water vegetation acquired using UAVs."
+readme = "README.md"
+license = {file = "LICENSE"}
+keywords = ["hyperspectral", "uav", "seagrass", "macroalgae", "habitat", "benthic"]
+classifiers = [
+  "Programming Language :: Python"
+]
+
+[project.urls]
+Repository = "https://github.com/mh-skjelvareid/massimal"
+"Bug Tracker" = "https://github.com/mh-skjelvareid/massimal/issues"
+
+[project.optional-dependencies]
+transect = [
+  "ffmpeg-python",
+  "pyexiftool",
+  "pandas",
+  "geopandas",
+  "rasterio"
+]
+plotting = [
+  "matplotlib"
+]
