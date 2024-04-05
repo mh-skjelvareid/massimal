@@ -2,11 +2,11 @@
 Tasks are organized according to the same structure as the datasets (Location -> Sensor -> Date), but a "general" task list is also included. 
 
 ## General
-- [ ] Make a function for converting .lcf (and .times?) files into "world" files (.wld) for easy visualization of Massimal images without full georeferencing.
-    - [ ] Read .lcf and .times files as NumPy arrays (with [numpy.loadtxt](https://numpy.org/doc/stable/reference/generated/numpy.loadtxt.html#numpy.loadtxt)). See also video_transect.track_csv_to_geodataframe().
-    - [ ] Calculate average altitude
-    - [ ] Calculate start and end positions, middle and corners. Linear regression?
-    - [ ] Calculate world file transform according to specifications from [Wikipedia](https://en.wikipedia.org/wiki/World_file) and/or [ArcGIS](https://pro.arcgis.com/en/pro-app/3.1/help/data/imagery/world-files-for-raster-datasets.htm). Note: Note able to specify CRS sin sidecar file that is automatically read. However, image is by default projected using QGIS project CRS (set to UTM). 
+- [x] Make a function for converting .lcf (and .times?) files into "world" files (.wld) for easy visualization of Massimal images without full georeferencing.
+    - [x] Read .lcf and .times files as NumPy arrays (with [numpy.loadtxt](https://numpy.org/doc/stable/reference/generated/numpy.loadtxt.html#numpy.loadtxt)). See also video_transect.track_csv_to_geodataframe().
+    - [x] Calculate average altitude
+    - [x] Calculate start and end positions, middle and corners. Linear regression?
+    - [x] Calculate world file transform according to specifications from [Wikipedia](https://en.wikipedia.org/wiki/World_file) and/or [ArcGIS](https://pro.arcgis.com/en/pro-app/3.1/help/data/imagery/world-files-for-raster-datasets.htm). Note: Not able to specify CRS in sidecar file that is automatically read. However, image is by default projected using QGIS project CRS (set to UTM). 
 - [ ] Make a function for reading Garmin CSV files, interpolating to a fixed distance / time step (preferrably distance) and writing the result as a CSV file compatible with video transect image extraction. 
     - [ ] Read Garmin CSV file
     - [ ] Check time zone GPS vs video
@@ -14,7 +14,7 @@ Tasks are organized according to the same structure as the datasets (Location ->
 - [x] Use PCA for localized sun glint correction
     - [x] Write function for applying learned PCA for sun glint correction of image
     - [x] Write function for collecting (random) spectra from set of images and fitting PCA model to these
-- [ ] Write code to export RGB images as PNG with transparency layer (useful for display in QGIS)
+- [x] Write code to export RGB images as PNG with transparency layer (useful for display in QGIS)
     
 
 
@@ -27,10 +27,10 @@ Tasks are organized according to the same structure as the datasets (Location ->
     - [ ] Batch process all images - copy to other folder - save with lower quality(?) (see [skimage.io.imsave](https://scikit-image.org/docs/stable/api/skimage.io.html#skimage.io.imsave), use "quality" keyword, 1 to 100)
     - [ ] Batch color correct used images. 
 - [x] Georeference GoPro video from boat
-- [ ] Sun glint correct?
+- [x] Sun glint correct?
 
 
 ## Larvik
-- [ ] Georeference GoPro video from boat
-- [ ] Sun glint correct?
+- [ ] Georeference GoPro video from boat - maybe not needed
+- [x] Sun glint correct?
  
