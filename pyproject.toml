@@ -6,6 +6,10 @@ build-backend = "hatchling.build"
 name = "massimal"
 version = "2024.4"
 dependencies = [
+  "ipython",
+  "jupyterlab",
+  "ipykernel",
+  "matplotlib",
   "numpy<2.0",
   "scipy",
   "tensorflow",
