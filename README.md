@@ -29,6 +29,9 @@ When managing conda environments, the following commands for listing, renaming a
     conda env remove --name env_name
     conda clean --all
 
+## Tests
+The Massimal project is mainly a data science project, and much of the development is done in Jupyter notebooks. When "repeated tasks" are discovered, the code is generalized and placed in the python module (under src/massimal). Ideally, all the code should have unit tests, but it's hard to write tests for some of the data science-relatated code, and unit tests have not been prioritized yet. For now, a selection of Jupyter notebooks are included in the folder "test", as a form of more "manual" testing. 
+
 ## Website
 The [Massimal website](https://en.uit.no/project/massimal) has information about the project, it's members, publications etc.
 
