@@ -12,7 +12,8 @@ dependencies = [
   "matplotlib",
   "numpy<2.0",
   "scipy",
-  "tensorflow[and-cuda]",
+  "protobuf==3.20"
+  "tensorflow==2.8.0",
   "scikit-learn",
   "scikit-learn-intelex",
   "imbalanced-learn",
