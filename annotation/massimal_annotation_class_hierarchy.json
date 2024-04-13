@@ -19,12 +19,12 @@
                 "Rockweed, geolittoral":[
                     "Fucus spiralis",
                     "Pelvetia canaliculata"
-                ],
-                "Other brown algae":[
-                    "Chorda filum",
-                    "Desmarestia aculeata"
                 ]
-            }
+            },
+            "Brown algae, other":[
+                "Chorda filum",
+                "Desmarestia aculeata"
+            ]
         },
         "Red algae":{
             "Coralline algae": [
