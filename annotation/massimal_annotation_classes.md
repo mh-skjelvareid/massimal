@@ -15,12 +15,12 @@ Some parent classes currently have only one child class. In this case, only one 
             4. Saccharina latissima
             5. Alaria esculenta
         2. Rockweed
-            1. Hydrolittoral
-                1. Ascophyllum nodosum
-                2. Fucus vesiculosus
+            1. Rockweed, hydrolittoral
+                1. Ascophyllum nodosum (not ann.)
+                2. Fucus vesiculosus 
                 3. Fucus serratus
                 4. Halidrys siliquosa
-            2. Geolittoral 
+            2. Rockweed, geolittoral 
                 1. Fucus spiralis
                 2. Pelvetia canaliculata
         3. Other brown algae
@@ -28,8 +28,8 @@ Some parent classes currently have only one child class. In this case, only one 
             2. Desmarestia aculeata
     2. Green algae
     3. Red algae
-    4. Coralline red algae 
-        1. Maerl
+        1. Coralline algae 
+            1. Maerl
     5. Turf
 3. Substrate
     1. Rock
@@ -43,7 +43,7 @@ Some parent classes currently have only one child class. In this case, only one 
 4. Animals
     1. Mussels
         1. Mytilus edilus
-5. Human activity
+5. Human activity (not ann.)
     1. Trawl tracks
 
 

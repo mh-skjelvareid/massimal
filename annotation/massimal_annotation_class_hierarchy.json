@@ -1,0 +1,57 @@
+{
+    "Deep water":[],
+    "Algae":{
+        "Brown algae":{
+            "Kelp":[
+                "Laminaria hyperborea",
+                "Laminaria digitata",
+                "Sacchoriza polyides",
+                "Saccharina latissima",
+                "Alaria esculenta"
+            ],
+            "Rockweed":{
+                "Rockweed, hydrolittoral":[
+                    "Ascophyllum nodosum",
+                    "Fucus vesiculosus",
+                    "Fucus serratus",
+                    "Halidrys siliquosa"
+                ],
+                "Rockweed, geolittoral":[
+                    "Fucus spiralis",
+                    "Pelvetia canaliculata"
+                ],
+                "Other brown algae":[
+                    "Chorda filum",
+                    "Desmarestia aculeata"
+                ]
+            }
+        },
+        "Red algae":{
+            "Coralline algae": [
+                "Maerl"
+            ]
+        },
+        "Green algae":[],
+        "Turf":[]
+    },
+    "Substrate":{
+        "Rock":[
+            "Bedrock",
+            "Boulder",
+            "Cobble",
+            "Gravel"
+        ],
+        "Sediment":[
+            "Sand",
+            "Mud"
+        ]
+    },
+    "Animals":{
+        "Mussels":[
+            "Mytilus edilus"
+        ]
+    },
+    "Human activity":[
+        "Trawl track"
+    ]
+}
