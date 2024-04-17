@@ -398,3 +398,36 @@ def _class_tree_search(class_tree,class_indices:dict,class_name:str) -> list[int
             if isinstance(class_tree,dict):                 # search one level down (if possible)
                 group_indices = _class_tree_search(class_tree[current_class_name],class_indices,class_name)
     return group_indices
+
+
+def convert_mask_for_grouped_indices(
+    class_mask,
+    grouped_classes: dict[str,set[int]]
+) -> dict[str,int]:
+    """ Convert mask with integer class labels to grouped labels 
+    
+    # Input arguments: 
+    class_mask:
+        Integer array with class labels. 
+        Value 0 is reserved for background.
+    grouped_classes:
+        Dictionary with group names (keys) and sets of integers indicating
+        integer labels for classes included in the group.
+
+    # Returns:
+    group_mask:
+        mask with same dimensions as class_mask, but using integer labels
+        corresponding to grouped classes.
+    group_indices:
+        Dictinary with group names (keys) and group integer labels (values)
+    """
+    group_indices = dict()
+    group_mask = np.zeros_like(class_mask)
+    
+    for i,(group_name, class_indices) in enumerate(grouped_classes.items()):
+        group_index = i+1
+        group_indices[group_name] = group_index
+        for class_index in class_indices:
+            class_mask = (class_mask==class_index)
+            group_mask[class_mask] = group_index
+    return group_mask, group_indices
