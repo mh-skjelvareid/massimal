@@ -312,7 +312,11 @@ def annotation_data_to_matrix(data,class_dict):
 
 
 
-def class_indices_from_hierarchy(class_hierarchy:dict,class_indices:dict[str,int],class_names:list[str]) -> dict[str,list[int]]:
+def class_indices_from_hierarchy(
+    class_hierarchy:dict,
+    class_indices:dict[str,int],
+    class_names:list[str]
+) -> dict[str,set[int]]:
     """ Group class indices based on class hierarchy 
     
     # Input arguments:
@@ -357,7 +361,7 @@ def class_indices_from_hierarchy(class_hierarchy:dict,class_indices:dict[str,int
             continue
         
         # Get indices corresponding to class name
-        grouped_class_indices[class_name] = _class_tree_search(class_hierarchy,class_indices,class_name)
+        grouped_class_indices[class_name] = set(_class_tree_search(class_hierarchy,class_indices,class_name))
         
         # Issue warning if class name not found in class hierarchy
         if not(grouped_class_indices[class_name]):
