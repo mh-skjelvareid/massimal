@@ -44,11 +44,12 @@ def percentile_stretch(image,percentiles=(2,98),separate_bands=True, ignore_zero
     else:
         out_range = (0,1)  # Float
 
-    # Create mask indicating non-zero pixels
+    # Create mask indicating non-zero and non-NaN pixels
     if ignore_zeros:
         mask = ~np.all(image==0,axis=2)
     else:
         mask = np.ones(image.shape[:-1],dtype=bool)
+    #mask &= ~np.any(np.isnan(image),axis=2)
 
     # Case: Stretch bands separately
     if separate_bands:
