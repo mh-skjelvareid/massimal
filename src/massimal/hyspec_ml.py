@@ -222,7 +222,7 @@ def save_pca_model(pca_model,X_notscaled,npz_filename,n_components = 'all', feat
         X_mean = np.mean(X_notscaled,axis=0),
         X_std = np.std(X_notscaled,axis=0),
         explained_variance_ratio = explained_variance_ratio,
-        feature_lablels = feature_labels)
+        feature_labels = feature_labels)
     
 
 def read_pca_model(npz_filename,include_explained_variance=False,include_feature_labels=False):
