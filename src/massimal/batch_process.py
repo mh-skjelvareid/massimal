@@ -3,9 +3,8 @@
 # Imports
 import skimage, skimage.io, skimage.morphology
 import numpy as np
-import spectral
 import os
-import misc, hyspec_io, preprocess, image_render, annotation
+from massimal import misc, hyspec_io, preprocess, image_render
 import tqdm
 import pathlib
 

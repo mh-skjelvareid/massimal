@@ -1,7 +1,7 @@
 import numpy as np
 import sklearn.base
 import skimage.morphology
-import hyspec_io
+from massimal import hyspec_io
 import cv2 
 import numpy.random
 from pathlib import Path

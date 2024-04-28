@@ -3,7 +3,7 @@ import ffmpeg
 import pandas as pd
 import geopandas
 import warnings
-import misc
+from massimal import misc
 import numpy as np
 import datetime
 from pathlib import Path
