@@ -1,6 +1,6 @@
 import math
 import numpy as np
-import crs_tools
+from massimal import crs_tools
 
 
 def pushbroom_width_on_ground(opening_angle_deg,relative_altitude):
