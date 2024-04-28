@@ -204,8 +204,9 @@ def save_pca_model(pca_model,X_notscaled,npz_filename,n_components = 'all', feat
     The function will save the following arrays to the npz. file:
         - W_pca:  PCA "weights", shape (N_components, N_features)  
         - X_mean: X mean values, shape (N_features,)
-        - X_std:  X standard deviations, shape (N_features)
-        - explained_variance_ratio, shape (N_components)
+        - X_std:  X standard deviations, shape (N_features,)
+        - explained_variance_ratio, shape (N_components,)
+        - feature_labels (optional), shape (N_features,)
     """
     # If n_components specified, only use n first components
     if n_components != 'all':
@@ -224,17 +225,22 @@ def save_pca_model(pca_model,X_notscaled,npz_filename,n_components = 'all', feat
         feature_lablels = feature_labels)
     
 
-def read_pca_model(npz_filename,include_explained_variance=False):
+def read_pca_model(npz_filename,include_explained_variance=False,include_feature_labels=False):
     """ Load PCA weights and X mean and std from NumPy npz file
     
     # Arguments:
     npz_filename    Path to *.npz file where data is saved
-    
+
+    # Keyword arguments:
+    include_explained_variance - whether to include explained variance
+    include_feature_labels - whether to include feature labels
+
     # Returns:
     W_pca:    PCA "weights", shape (N_components, N_features)  
     X_mean:   X mean values, shape (1,N_features,)
     X_std:    X standard deviations, shape (1,N_features)
-    explained_variance_ratio (if include_explained_variance = True)
+    explained_variance_ratio (optional), shape (N_components,)
+    feature_labels (optional), shape (N_features,)
     """
     return_list = []
     with np.load(npz_filename) as npz_files:
