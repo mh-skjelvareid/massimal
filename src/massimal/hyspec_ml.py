@@ -249,6 +249,8 @@ def read_pca_model(npz_filename,include_explained_variance=False,include_feature
         return_list.append(npz_files['X_std'])
         if include_explained_variance:
             return_list.append(npz_files['explained_variance_ratio'])
+        if include_feature_labels:
+            return_list.append(npz_files['feature_labels'])        
         
     return tuple(return_list)
 
