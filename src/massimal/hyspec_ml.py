@@ -188,14 +188,17 @@ def apply_classifier_to_image(classifier,image,fill_zeros=True):
     return y_pred_im
 
 
-def save_pca_model(pca_model,X_notscaled,npz_filename,n_components = 'all'):
+def save_pca_model(pca_model,X_notscaled,npz_filename,n_components = 'all', feature_labels = None):
     """ Save PCA weights and X mean and std as NumPy npz file
     
     # Arguments:
     pca_model       sklearn.decomposition.PCA model which has beed fitted to (scaled) data X_scaled
-    X_notscaled     X array, mean value for each feature in X matrix (before scaling)
+    X_notscaled     X array before scaling - used to calculate "original" mean / std
     npz_filename    Path to *.npz file where data will be saved
+    
+    # Keyword arguments
     n_components    Number of PCA components to include
+    feature_labels  Array with labels for each feature (each column of X) 
     
     # Notes:
     The function will save the following arrays to the npz. file:
@@ -214,10 +217,11 @@ def save_pca_model(pca_model,X_notscaled,npz_filename,n_components = 'all'):
         
     # Save as npz file
     np.savez(npz_filename,
-         W_pca = W_pca,
-         X_mean = np.mean(X_notscaled,axis=0),
-         X_std = np.std(X_notscaled,axis=0),
-         explained_variance_ratio = explained_variance_ratio)
+        W_pca = W_pca,
+        X_mean = np.mean(X_notscaled,axis=0),
+        X_std = np.std(X_notscaled,axis=0),
+        explained_variance_ratio = explained_variance_ratio,
+        feature_lablels = feature_labels)
     
 
 def read_pca_model(npz_filename,include_explained_variance=False):
