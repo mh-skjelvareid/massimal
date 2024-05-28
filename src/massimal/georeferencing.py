@@ -1,7 +1,12 @@
 import math
 import numpy as np
+import numpy.typing as npt
 from massimal import crs_tools
-
+import rasterio
+from rasterio.transform import Affine
+from rasterio.profiles import DefaultGTiffProfile
+from rasterio.crs import CRS
+import numpy.typing as npt
 
 def pushbroom_width_on_ground(opening_angle_deg,relative_altitude):
     """ Calculate width of pushbroom camera footprint on ground 
@@ -105,7 +110,7 @@ def read_times_file(times_file_path,time_rel_to_file_start=True):
 
 
 def calculate_pushbroom_imager_transform(time,longitude,latitude,altitude,framerate, 
-                                         ground_altitude=0, pitch_offset=0,roll_offset=0,
+                                         ground_altitude=0.0, pitch_offset=0.0,roll_offset=0.0,
                                          n_crosstrack_pixels=900, camera_opening_angle_deg=36.5,
                                          use_world_file_ordering=False):
     """ Calculate simple affine transform to map pushbroom raster image to UTM coordinates 
@@ -252,3 +257,83 @@ def world_file_from_lcf_times_files(lcf_file_path,times_file_path,world_file_pat
 
     # Save to file
     np.savetxt(world_file_path,affine_transform_parameters)
+
+
+def save_geotiff_with_affine_transform(
+        image: npt.NDArray,
+        crs_str: str,
+        geotiff_path,
+        affine_transform: tuple = None,
+        world_file_path = None,
+        channels_already_first: bool = False) -> None:
+    """ Save georeferenced image (single- or multiband) as GeoTIFF using affine transform
+    
+    # Input arguments:
+    image:
+        2D or 3D NumPy array
+    crs_str:
+        Coordinate reference system mathcing the affine transform used.
+        String accepted by the rasterio.crs.CRS.from_string() method
+        (https://rasterio.readthedocs.io/en/latest/api/rasterio.crs.html#rasterio.crs.CRS.from_string)
+        EPSG, PROJ, and WKT strings are accepted.
+        Example: "EPSG:32633"
+    geotiff_path:
+        File path for the GeoTIFF file to be written.
+        
+    # Keyword arguments:
+    affine_transform:
+        A 6-parameter transform for translation, scaling and rotation of 
+        the image. Example (for UTM 33N): 
+        (0.025746, 0.025290, 500199.3122, 0.02402464, -0.02710314, 7455416.7654)
+        The ordering corresponds to (A,B,C,D,E,F).
+        Note that this is not the same ordering as in the world file.
+        If both affine_transform and world_file_path are specified, or if none
+        of them are specified, an error is thrown.
+    world_file_path:
+        Path to text file containing exactly 6 lines with a single
+        numer on each line. See https://en.wikipedia.org/wiki/World_file
+        for specification. Note that the ordering of the lines in the file
+        corresponds to (A,D,B,E,C,F)
+    channels_already_first:
+        Flag indicating that the image is organized "channels-first".
+        This is the format required by rasterio / GDAL when writing GeoTIFFs.
+        If False (default), channels in image are assumed to be last 
+        (shape (nrows,ncols,nchannels)), and the last axis will be moved
+        to first position before the file is written.    
+    """
+
+    # Check affine transform input
+    if (affine_transform is None): 
+        if (world_file_path is None):
+            raise ValueError("Please specify either affine_transform or world_file_path")
+        else:
+            affine_transform = np.loadtxt(world_file_path)
+    elif (world_file_path is not None):
+            raise ValueError("Please specify either affine_transform or world_file_path (not both)")
+
+    # Create affine transform object
+    transform = Affine(*affine_transform)
+
+    # Convert 2D array to 3D (for unified processing)
+    if image.ndim < 3:
+         image = np.atleast_3d(image)
+         channels_already_first = False
+
+    # Ensure "channels-first" array, as required by rasterio/GDAL
+    if not channels_already_first:
+        image = np.moveaxis(image,2,0)
+
+    # Create default GeoTIFF profile and update with current parameters
+    profile = DefaultGTiffProfile()
+    profile.update(height = image.shape[1], 
+                   width = image.shape[2],
+                   count = image.shape[0], 
+                   dtype = str(image.dtype),
+                   crs = CRS.from_str(crs_str),
+                   transform = transform)
+    
+    # Register GDAL format drivers and configuration options with a context manager.
+    with rasterio.Env():
+        # Write image with context manager
+        with rasterio.open(geotiff_path, 'w', **profile) as dst:
+            dst.write(image) 
