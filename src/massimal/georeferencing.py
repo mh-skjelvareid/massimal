@@ -244,7 +244,7 @@ def world_file_from_lcf_times_files(lcf_file_path,times_file_path,world_file_pat
     framerate = 1/np.mean(np.diff(image_times))
 
     # Calculate transform parameters
-    affine_transform_parameters, _ = calculate_pushbroom_imager_transform(
+    affine_transform_parameters, utm_epsg = calculate_pushbroom_imager_transform(
         lcf_data['time'],
         lcf_data['longitude'],
         lcf_data['latitude'],
@@ -258,6 +258,9 @@ def world_file_from_lcf_times_files(lcf_file_path,times_file_path,world_file_pat
     # Save to file
     np.savetxt(world_file_path,affine_transform_parameters)
 
+    # Return EPSG CRS code
+    return utm_epsg
+
 
 def save_geotiff_with_affine_transform(
         image: npt.NDArray,
@@ -265,6 +268,7 @@ def save_geotiff_with_affine_transform(
         geotiff_path,
         affine_transform: tuple = None,
         world_file_path = None,
+        band_names: tuple[str] = None,
         channels_already_first: bool = False) -> None:
     """ Save georeferenced image (single- or multiband) as GeoTIFF using affine transform
     
@@ -307,7 +311,8 @@ def save_geotiff_with_affine_transform(
         if (world_file_path is None):
             raise ValueError("Please specify either affine_transform or world_file_path")
         else:
-            affine_transform = np.loadtxt(world_file_path)
+            (a,d,b,e,c,f) = np.loadtxt(world_file_path) # Load parameters in "world file order"
+            affine_transform = (a,b,c,d,e,f)            # Use rasterio Affine ordering
     elif (world_file_path is not None):
             raise ValueError("Please specify either affine_transform or world_file_path (not both)")
 
@@ -329,11 +334,14 @@ def save_geotiff_with_affine_transform(
                    width = image.shape[2],
                    count = image.shape[0], 
                    dtype = str(image.dtype),
-                   crs = CRS.from_str(crs_str),
+                   crs = CRS.from_string(crs_str),
                    transform = transform)
     
     # Register GDAL format drivers and configuration options with a context manager.
     with rasterio.Env():
         # Write image with context manager
-        with rasterio.open(geotiff_path, 'w', **profile) as dst:
-            dst.write(image) 
+        with rasterio.open(geotiff_path, 'w', **profile) as dataset:
+            if band_names is not None:
+                for i in range(dataset.count):
+                    dataset.set_band_description(i+1, band_names[i])
+            dataset.write(image) 
