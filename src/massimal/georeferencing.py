@@ -7,6 +7,7 @@ from rasterio.transform import Affine
 from rasterio.profiles import DefaultGTiffProfile
 from rasterio.crs import CRS
 import numpy.typing as npt
+import subprocess
 
 def pushbroom_width_on_ground(opening_angle_deg,relative_altitude):
     """ Calculate width of pushbroom camera footprint on ground 
@@ -345,3 +346,18 @@ def save_geotiff_with_affine_transform(
                 for i in range(dataset.count):
                     dataset.set_band_description(i+1, band_names[i])
             dataset.write(image) 
+
+
+def update_image_geotransform(image_path,new_geotransform:list[float]) -> None:
+    """ Update affine geotransform for image using the rio command line tool 
+    
+    # Input parameters
+    image_path:
+        Path to image, will be modified in-place
+    new_geotransform:
+        6-parameter affine transform, list of floats, ordered (a,b,c,d,e,f)
+
+    See also https://rasterio.readthedocs.io/en/latest/api/rasterio.rio.edit_info.html  
+    """
+    rio_cmd = f'rio edit-info --transform "{list(new_geotransform)}" {str(image_path)}'
+    subprocess.run(rio_cmd)
