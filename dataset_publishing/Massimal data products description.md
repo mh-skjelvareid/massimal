@@ -90,9 +90,9 @@ The following data products are published
     - ENVI file
     - Downwelling irradiance
     - Sensor position (*.times, *.lcf)
-- L2b: Reflectance
+- L2a: Reflectance
     - GeoTIFF, georeferenced with affine transform (whole cube / rgb)
-- L2c: Water-leaving reflectance (maybe)
+- L2b: Water-leaving reflectance (maybe)
 
 ## Annotation products
 
@@ -112,27 +112,125 @@ Using an affine transform seemed as a "good enough" georeferencing solution, giv
 
 ## Massimal data folder structure
 
+Note: Python module (treelib)[https://treelib.readthedocs.io/en/latest/] or (anytree)[https://anytree.readthedocs.io/en/latest/]could be useful for representing the structure.
+
 - root
     - area_location (e.g. bodo_juvika)
         - aerial
             - hyperspectral
                 - date
                     - images
-                        - L0_raw
                         - L1_radiance
-                        - L2_reflectance
+                            - \*.bil
+                            - \*.bil.hdr
+                            - \*.spec
+                            - \*.spec.hdr
+                            - \*.lcf
+                            - \*.times
+                            - \*.wld
+                        - L2a_reflectance
+                            - \*.bil
+                            - \*.bil.hdr
+                            - \*.lcf
+                            - \*.times
+                            - \*.wld
+                            - \*.tif (rotated transform)
+                        - L2b_water_leaving_reflectance
+                            - \*.bil
+                            - \*.bil.hdr
+                            - \*.lcf
+                            - \*.times
+                            - \*.wld
+                            - \*.tif (rotated transform)
+                    - mosaic
+                        - L2a_reflectance
+                            - images (non-rotated transform)
+                                \*.tif
+                            - \*.vrt
+                            - \*.ovr
+                        - L2a_reflectance
+                            - images (non-rotated transform)
+                                - \*.tif
+                            - \*.vrt
+                            - \*.ovr                        
                     - annotations
+                        - images 
+                            - color_images
+                                - \*.png
+                            - grayscale_images
+                                - \*.png
+                            - \*.json
+                        - hasty_json
+                            - \*.json
+
                     - metadata
+                        - hyperspectral_camera_calibration
+                            - \*.icf
+                        - irradiance_spectromenter_calibration
+                            - \*.dcp
             - multispectral
                 - date
+                    - images (?)
                     - mosaic
                         - separate_bands
+                            - blue
+                            - green
+                            - red
+                            - red_edge
+                            - nir
+                            - lwir
                         - merged
+                            - \*.tif
+                    - report
             - rgb
                 - date
                     - images
                     - mosaic
+                    - report
         - ground
-            - images
-            - depth
-            - water quality 
+            - usv
+                - date
+                    - navigation_log
+                        - *.csv
+                    - images
+                        - *.jpg / *.png (?) (geotagged)
+                    - depth
+                        - *.csv
+                    - water_quality (?)
+                        - *.csv
+            - snorkeling_transects
+                - date
+                    - transect_name
+                        - images
+                            - \*.jpg / \*.png (?) (geotagged?) 
+                        - start_end_points
+                            - \*.csv
+            - rov
+                - date
+                    - images
+                        - \*.jpg / \*.png (?) (geotagged?) 
+                    - start_end_points
+                        - \*.csv
+            - walking_transects
+                - date
+                    - images
+                        - \*.jpg / \*.png (?) (geotagged?) 
+                    - position_log
+                        - \*.csv
+            - boat_transects
+                - date
+                    - images
+                        - \*.jpg / \*.png (?) (geotagged?) 
+                    - position_log
+                        - \*.csv
+
+
+To do:
+- Create folder structure
+- Copy existing files into structure
+- (Re)process ground images for geotagging
+- Merge multispectral single band images into multiband images(?)
+
+## Notes on multispectral images
+Ølbergholmen: Images taken with Micasense Altum camera. Not sure of the exact serial number for the camera. The bands given below are for serial number AL04 or lower.
+Blue (475nm ±20nm), Green (560nm ±20nm), Red (668nm ±10nm), Red Edge (717nm ±10nm), NIR (840nm ±40nm), Thermal (11 μm ± 6 μm)
