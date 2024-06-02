@@ -361,3 +361,37 @@ def update_image_geotransform(image_path,new_geotransform:list[float]) -> None:
     """
     rio_cmd = f'rio edit-info --transform "{list(new_geotransform)}" {str(image_path)}'
     subprocess.run(rio_cmd)
+
+
+def reproject_rotated_raster_to_nonrotated(input_raster_path,output_raster_path):
+    """ Convert raster with rotated geotrasform into non-rotated raster with same crs 
+    
+    # Explanation of arguments used:
+    -overwrite:
+        Overwrite existing files without error / warning
+    -q:
+        Suppress GDAL output (quiet)
+    -r near:
+        Resampling method: Nearest neighbor
+    -of GTiff:
+        Output format: GeoTiff  
+    """
+    gdal_args = ['gdalwarp', '-overwrite', '-q', '-r', 'near', '-of', 'GTiff', 
+                 str(input_raster_path), str(output_raster_path)]
+    subprocess.run(gdal_args)
+
+
+def build_virtual_raster(input_raster_paths,virtual_raster_path):
+    """ Merge multiple images into VRT 
+    
+    # Explanation of arguments used:
+    -q:
+        Suppress GDAL output ("quiet")
+    -overwrite():
+        Overwrite existing files without error / warning
+    
+    """
+    gdal_cmd = (['gdalbuildvrt', '-q', '-overwrite'] + 
+            [str(virtual_raster_path)] + 
+            [str(path) for path in input_raster_paths])
+    subprocess.run(gdal_cmd)
