@@ -100,7 +100,7 @@ The following data products are published
 ### Affine transformation / "world files"
 The information contained in the *.lcf file enables more accurate georeferencing than a simple affine transform, at least in theory. Affine transformation is limited to translation, rotation and scaling of the original rectangular image, and does not take all the details of the camera movement and the ground topography into account. However, in the Massimal project, most images were aquired with the camera mounted on a gimbal, which de-coupled the camera from the pitch and roll movements of the UAV. A simple affine transform was found to yield very similar results as "full" georeferencing (done via a plugin in Spectronon software, assuming a "flat earth"). Using an affine transform also has a number of advantages:
 - No loss of resolution in the georeferencing process, and no "holes" in the resulting image
-- The affine transformation can very easily be updated, while full georeferencing is very time-consuming.
+- The affine transformation can very easily be updated, while full georeferencing is quite time-consuming.
 
 The input data for georeferencing was also not perfectly accurate:
 - Positions were measured with a standard GNSS system, which has an accuracy of approximately 3-5 meters. Combining the GNSS data with accelerometer and gyroscope data in a Kalman filter increases the accuracy, but positions are not as accurate as with RTK/PPK systems.
@@ -110,3 +110,29 @@ The input data for georeferencing was also not perfectly accurate:
 Using an affine transform seemed as a "good enough" georeferencing solution, given that perfect georeferencing was not possible due to imperfect IMU data. Note, however, that for many of the datasets it is possible to improve the georeferencing by manually identifying key points in the hyperspectral images and in the RGB base map (comment further?). 
 
 
+## Massimal data folder structure
+
+- root
+    - area_location (e.g. bodo_juvika)
+        - aerial
+            - hyperspectral
+                - date
+                    - images
+                        - L0_raw
+                        - L1_radiance
+                        - L2_reflectance
+                    - annotations
+                    - metadata
+            - multispectral
+                - date
+                    - mosaic
+                        - separate_bands
+                        - merged
+            - rgb
+                - date
+                    - images
+                    - mosaic
+        - ground
+            - images
+            - depth
+            - water quality 
