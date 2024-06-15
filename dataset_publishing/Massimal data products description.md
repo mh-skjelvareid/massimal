@@ -75,13 +75,16 @@ Reflectance values are represented as "single" float values (32 bits) between 0 
 
 Reflectance images are limited to wavelengths below 930 nm, because the low signal-to-noise levels above 930 nm were causing spectral "spikes". 
 
-### L2b: Reflectance (GeoTIFF, georeferenced, published)
-Reflectance images (L2a) are georeferenced using the affine transform (saved as "world files"), and are saved as GeoTIFF images using single float values (32-bit). Both complete image cubes (hyperspectral image) and RGB images (3 bands, wavelengths to be decided?) are made.
+Reflectance images are also georeferenced using the affine transform (saved as "world files"), and are saved as GeoTIFF images using single float values (32-bit). Both complete image cubes (hyperspectral image) and RGB images (3 bands, wavelengths to be decided?) are made.
 
-### L2c: Water leaving reflectance (published)
+### L2b: Water leaving reflectance (published)
 Reflectance after applying sun glint correction (to be decided...). Same file format and georeferencing as L2b.
 
 Limited to range [400,730] nm. There is almost no radiance above 730 nm due to water absorption. Signal-to-noise is also low both below 400 nm and above 730 nm. 
+
+Pixels with mostly negative spectra are set to zero (masked out). 
+
+Spectra are also smoothed using S-G filtering, and also binned/downsampled (?). The final result is saved as a GeoTIFF(?)
 
 
 ### Summary
@@ -91,8 +94,10 @@ The following data products are published
     - Downwelling irradiance
     - Sensor position (*.times, *.lcf)
 - L2a: Reflectance
+    - ENVI file 
     - GeoTIFF, georeferenced with affine transform (whole cube / rgb)
 - L2b: Water-leaving reflectance (maybe)
+    - GeoTIFF
 
 ## Annotation products
 
@@ -109,6 +114,22 @@ The input data for georeferencing was also not perfectly accurate:
 
 Using an affine transform seemed as a "good enough" georeferencing solution, given that perfect georeferencing was not possible due to imperfect IMU data. Note, however, that for many of the datasets it is possible to improve the georeferencing by manually identifying key points in the hyperspectral images and in the RGB base map (comment further?). 
 
+## Hyperspectral naming pattern
+hyspec\_area\_location\_date\_flight\_imagenumber_\productname.fileext
+
+Example: hyspec_larvik_kongsbakkebukta_20230830_flight_03_image_17_radiance.bil
+
+Raw data currently are named e.g.
+
+Kongsbakkebukta_Pika_L_17.bil
+
+Thw following changes could be made, in addition to adding location and date to the filename
+- "Pika_L" does not need to be part of the filename, as it is the same for all files in the dataset
+- Numbering should be done with a fixed number of digits, padded with leading zeroes. With the current naming, file "Kongsbakkebukta_Pika_L_17" comes before "Kongsbakkebukta_Pika_L_3". This propagates into incorrect ordering in subsequent processing, e.g. when importing into GIS programs, when manually searching for a file, etc.
+
+Files have so far not been organized according to flight. This could be done manually, or files could be automatically grouped according to time "proximity". Use K-means clustering on timestamps? Should be easy to set number of clusters.
+
+Need to rename both radiance and reflectance files using same naming convention. Water leaving reflectance can be created based on reflectance files.
 
 ## Massimal data folder structure
 
@@ -234,3 +255,7 @@ To do:
 ## Notes on multispectral images
 Ølbergholmen: Images taken with Micasense Altum camera. Not sure of the exact serial number for the camera. The bands given below are for serial number AL04 or lower.
 Blue (475nm ±20nm), Green (560nm ±20nm), Red (668nm ±10nm), Red Edge (717nm ±10nm), NIR (840nm ±40nm), Thermal (11 μm ± 6 μm)
+
+
+## GCPs
+- Check out [GCPEditorPro](https://github.com/uav4geo/GCPEditorPro)
