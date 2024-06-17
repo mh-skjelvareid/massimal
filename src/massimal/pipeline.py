@@ -70,6 +70,68 @@ def read_envi(header_filename: Union[Path,str],
     return (image,wl,im_handle.metadata)
 
 
+def save_envi_image(header_filename:Union[Path,str],
+                    image:np.ndarray,
+                    metadata:dict, 
+                    dtype:Union[np.dtype,str,None]=None) -> None:
+    """ Save ENVI file with parameters compatible with Spectronon
+
+    # Usage:
+    save_envi_image(header_filename,image,metadata)
+
+    # Required arguments:
+    header_filename:    Path to header file.
+                        Data file will be saved in the same location and with
+                        the same name, but without the '.hdr' extension
+    image:              Numpy array with hyperspectral image
+    metadata:           Dict containing (updated) image metadata.
+                        See load_envi_image()
+
+    Optional arguments:
+    dtype:      Data type for ENVI file. Follows numpy naming convention.
+                Typically 'uint16' or 'single' (32-bit float)
+                If None, dtype = image.dtype
+    """
+
+    if dtype is None:
+        dtype = image.dtype
+    
+    # Save file
+    spectral.envi.save_image(header_filename,image,
+        dtype=dtype, metadata=metadata, force=True, ext=None)
+
+
+def bin_image(image:np.ndarray,
+              line_bin_size:int=1, 
+              sample_bin_size:int=1,
+              channel_bin_size:int=1,
+              average:bool=True) -> np.ndarray:
+    """ Bin image cube (combine neighboring pixels) 
+    
+    Inspired by https://stackoverflow.com/a/36102436 
+    
+    """
+    assert image.ndim == 3
+    n_lines, n_samples, n_channels = image.shape
+    assert (n_lines % line_bin_size) == 0
+    assert (n_samples % sample_bin_size) == 0
+    assert (n_channels % channel_bin_size) == 0
+
+    n_lines_binned = n_lines // line_bin_size
+    n_samples_binned = n_samples // sample_bin_size
+    n_channels_binned = n_channels // channel_bin_size
+
+    image = image.reshape(n_lines_binned,line_bin_size,
+                          n_samples_binned,sample_bin_size,
+                          n_channels_binned,channel_bin_size)
+    if average:
+        image = np.mean(image,axis=(1,3,5))
+    else:
+        image = np.sum(image,axis=(1,3,5))
+
+    return image
+
+
 class RadianceCalibrationDataset:
     """ A radiance calibration dataset for Resonon hyperspectral cameras.
     
@@ -242,3 +304,116 @@ class RadianceCalibrationDataset:
         
         """
         return read_envi(self.gain_file_path)  
+
+
+class RadianceConverter:
+
+    def __init__(self, radiance_calibration_file: Union[Path,str]=None):
+        
+        # Set radiance calibration file
+        if radiance_calibration_file is None:
+            icp_files = [self.raw_data_dir.glob('*.icp')]
+            if len(icp_files) == 0:
+                raise FileNotFoundError(f'No calibration file (*.icp) found in {self.raw_data_dir}')
+            elif len(icp_files) > 1:
+                raise ValueError(f'More than one calibration file (*.icp) found in {self.raw_data_dir}')
+            self.radiance_calibration_file = icp_files[0]
+        else:
+            self.radiance_calibration_file = radiance_calibration_file
+
+        # Create radiance calibration dataset
+        self.rc_dataset = RadianceCalibrationDataset(calibration_file=radiance_calibration_file)
+        
+        # Get radiance conversion frame (same for all images)
+        self._get_rad_conv_frame()
+
+    def _get_rad_conv_frame(self) -> None:
+        rad_conv_frame,_,rad_conv_metadata = self.rc_dataset.get_rad_conv_frame()
+        assert rad_conv_metadata['sample binning'] == '1'
+        assert rad_conv_metadata['spectral binning'] == '1'
+        assert rad_conv_metadata['samples'] == '900'
+        assert rad_conv_metadata['bands'] == '600'
+        self.rad_conv_frame = rad_conv_frame
+        self.rad_conv_metadata = rad_conv_metadata
+
+
+    def _get_best_matching_dark_frame(self, raw_image_metadata: dict) -> tuple[np.ndarray,dict]:
+        dark_frame,_,dark_frame_metadata,_,_ = self.rc_dataset.get_closest_dark_frame(
+            gain=float(raw_image_metadata['gain']), shutter=float(raw_image_metadata['shutter']))
+        return (dark_frame, dark_frame_metadata)
+
+    def _get_scaled_dark_frame(self, 
+                               dark_frame: np.ndarray,
+                               dark_frame_metadata:dict,
+                               raw_image_metadata:dict
+                               ) -> np.ndarray:
+        assert dark_frame_metadata['sample binning'] == '1'
+        assert dark_frame_metadata['spectral binning'] == '1'
+        binning_factor = (float(raw_image_metadata['sample binning']) * 
+                          float(raw_image_metadata['spectral binning']))
+        dark_frame = bin_image(dark_frame,
+                               sample_bin_size=int(raw_image_metadata['sample binning']),
+                               channel_bin_size=int(raw_image_metadata['spectral binning']))
+        dark_frame = dark_frame * binning_factor
+
+        return dark_frame
+    
+    def _get_scaled_rad_conv_frame(self,raw_image_metadata:dict) -> np.ndarray:
+        # Scaling due to binning
+        binning_factor = 1.0 / (float(raw_image_metadata['sample binning']) * 
+                                float(raw_image_metadata['spectral binning']))
+
+        # Scaling due to gain differences
+        rad_conv_gain = 10**(float(self.rad_conv_metadata['gain']) / 20.0)
+        input_gain = 10**(float(raw_image_metadata['gain']) / 20.0)
+        gain_factor = rad_conv_gain / input_gain
+        
+        # Scaling due to shutter differences
+        rad_conv_shutter = float(self.rad_conv_metadata['shutter'])
+        input_shutter = float(raw_image_metadata['shutter'])
+        shutter_factor = rad_conv_shutter / input_shutter
+
+        # Bin (average) radiance conversion frame to have same dimensions as input
+        rad_conv_frame = bin_image(self.rad_conv_frame,
+                                   sample_bin_size=int(raw_image_metadata['sample binning']),
+                                   channel_bin_size=int(raw_image_metadata['spectral binning']),
+                                   average=True) 
+
+        # Combine factors and scale frame
+        scaling_factor = binning_factor * gain_factor * shutter_factor
+        rad_conv_frame = rad_conv_frame * scaling_factor
+
+        return rad_conv_frame
+        
+
+    def convert_raw_image_to_radiance(self, 
+                                      raw_image: np.ndarray,
+                                      raw_image_metadata: dict
+                                      ) -> np.ndarray:
+        
+        # Get dark frame and radiance conversion frames scaled to input image
+        dark_frame, dark_frame_metadata = self._get_best_matching_dark_frame(raw_image_metadata)
+        dark_frame = self._get_scaled_dark_frame(dark_frame, dark_frame_metadata,raw_image_metadata)
+        rad_conv_frame = self._get_scaled_rad_conv_frame(raw_image_metadata)
+
+        # Flip frames if necessary
+        if (('flip radiometric calibration' in raw_image_metadata ) and
+            (raw_image_metadata['flip radiometric calibration'] == 'True')):
+            dark_frame = np.flip(dark_frame,axis=1) 
+            rad_conv_frame = np.flip(rad_conv_frame,axis=1)
+
+        # Subtract dark current and convert to radiance (microflicks)
+        radiance_image = (raw_image - dark_frame) * rad_conv_frame
+
+        # Set negative (non-physical) values to zero
+        radiance_image[radiance_image>0] = 0
+
+        # Convert to 16-bit integer format (more efficient for storage)
+        return radiance_image.astype(np.int16)
+    
+    # def read_convert_save_image(self,
+    #                             raw_image_header_path: Union[Path,str],
+    #                             radiance_image_header_path: Union[Path,str]
+    #                             ) -> None:
+
+        
