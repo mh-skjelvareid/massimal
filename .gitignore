@@ -117,8 +117,8 @@ dataset_specific/20220630_Juvika/model.png
 prelim/tensorflow/model.png
 dataset_specific/massimal_datasets_to_do.md
 massimal.code-workspace
-prelim/pipeline_processor/resonon_cubevault.py
-prelim/pipeline_processor/resonon_cubevault_commented.py
-prelim/pipeline_processor/resonon_radiance_conversion.py
-prelim/pipeline_processor/resonon_reflectance_conversion.py
-prelim/pipeline_processor/resonon_reflectance_conversion_from_radiance.py
+prelim/pipeline_processor/resonon_code/resonon_cubevault.py
+prelim/pipeline_processor/resonon_code/resonon_cubevault_commented.py
+prelim/pipeline_processor/resonon_code/resonon_radiance_conversion.py
+prelim/pipeline_processor/resonon_code/resonon_reflectance_conversion.py
+prelim/pipeline_processor/resonon_code/resonon_reflectance_conversion_from_radiance.py
