@@ -23,7 +23,8 @@ dependencies = [
   "tqdm",
   "h5py",
   "geopandas",
-  "rasterio"
+  "rasterio",
+  "pyyaml"
 ]
 
 requires-python = ">=3.8"
