@@ -4,6 +4,7 @@ import zipfile
 import numpy as np
 from typing import Union
 from pathlib import Path
+from scipy.signal import savgol_filter
 
 
 def read_envi(header_path: Union[Path,str], 
@@ -409,18 +410,6 @@ class RadianceConverter:
         
         """
         
-        # Set radiance calibration file
-        # if radiance_calibration_file is None:
-        #     icp_files = [self.raw_data_dir.glob('*.icp')]
-        #     if len(icp_files) == 0:
-        #         raise FileNotFoundError(f'No calibration file (*.icp) found in {self.raw_data_dir}')
-        #     elif len(icp_files) > 1:
-        #         raise ValueError(f'More than one calibration file (*.icp) found in {self.raw_data_dir}')
-        #     self.radiance_calibration_file = icp_files[0]
-        # else:
-        #     self.radiance_calibration_file = radiance_calibration_file
-
-        # Set up radiance calibration data
         self.radiance_calibration_file = Path(radiance_calibration_file)
         self.rc_dataset = RadianceCalibrationDataset(calibration_file=radiance_calibration_file)
         self.rad_conv_frame = None
@@ -448,7 +437,7 @@ class RadianceConverter:
 
     def _scale_dark_frame(self, dark_frame: np.ndarray, dark_frame_metadata:dict,
                                raw_image_metadata:dict) -> np.ndarray:
-        """ Scale dark frame to match binning, gain and shutter for input image """
+        """ Scale dark frame to match binning for input image """
         assert dark_frame_metadata['sample binning'] == '1'
         assert dark_frame_metadata['spectral binning'] == '1'
         binning_factor = (float(raw_image_metadata['sample binning']) * 
@@ -457,6 +446,8 @@ class RadianceConverter:
                                sample_bin_size=int(raw_image_metadata['sample binning']),
                                channel_bin_size=int(raw_image_metadata['spectral binning']))
         dark_frame = dark_frame * binning_factor
+        # NOTE: Dark frame not scaled based on differences in gain and shutter because
+        # the best matching dark frame has (approx.) the same values already. 
 
         return dark_frame
     
@@ -575,3 +566,143 @@ class RadianceConverter:
         raw_image,_,raw_image_metadata = read_envi(raw_header_path)
         radiance_image = self.convert_raw_image_to_radiance(raw_image,raw_image_metadata)
         save_envi(radiance_header_path,radiance_image,raw_image_metadata)
+
+
+class ReflectanceConverter:
+    """ A class for converting images from Resonon Pika L cameras to reflectance 
+    
+    """
+
+    def __init__(self,
+                 dw_cal_file:Union[Path,str],
+                 dw_cal_dir_name:str = 'downwelling_calibration_spectra') -> None:
+        self.dw_cal_file = Path(dw_cal_file)
+        assert self.dw_cal_file.exists()
+
+        # Unzip calibration frames into subdirectory
+        self.dw_cal_dir = self.dw_cal_file.parent / dw_cal_dir_name
+        self.dw_cal_dir.mkdir(exist_ok=True)
+        self._unzip_dw_cal_file()
+
+        # Load calibration data
+        self._load_dw_dark_and_conversion_spectra()
+
+
+    def _unzip_dw_cal_file(self,unzip_into_nonempty_dir:bool=False) -> None:
+        """ Unzip *.dcp file (which is a zip file) """
+        if not unzip_into_nonempty_dir and any(list(self.dw_cal_dir.iterdir())): 
+            print(f'INFO: Non-empty downwelling calibration directory {self.dw_cal_dir}')
+            print(f'INFO: Skipping unzipping of downwelling calibration file, assuming unzipping already done.') 
+            return
+        try:
+            with zipfile.ZipFile(self.dw_cal_file, mode='r') as zip_file:
+                for filename in zip_file.namelist():
+                    zip_file.extract(filename, self.dw_cal_dir)
+        except zipfile.BadZipFile:
+            print(f'File {self.dw_cal_file} is not a valid ZIP file.')
+        except Exception as e:
+            print('An unexpected error occured when extracting calibration file '
+                    f'{self.dw_cal_file}')
+            print(e)
+
+    def _load_dw_dark_and_conversion_spectra(self):
+        """ Load dark current and irradiance conversion spectra from cal. files """
+        # Define paths
+        dw_dark_path = self.dw_cal_dir / 'offset.spec.hdr'
+        dw_conv_path = self.dw_cal_dir / 'gain.spec.hdr'
+        assert dw_dark_path.exists()
+        assert dw_conv_path.exists()
+        
+        # Read from files
+        dw_dark_spec, dw_dark_wl, dw_dark_metadata = read_envi(dw_dark_path)
+        dw_conv_spec, dw_conv_wl, dw_conv_metadata = read_envi(dw_conv_path)
+        
+        # Save attributes
+        assert np.array_equal(dw_dark_wl,dw_conv_wl)
+        self._dw_wl = dw_dark_wl
+        self._dw_dark_spec = np.squeeze(dw_dark_spec) # Remove singleton axes
+        self._dw_dark_metadata = dw_dark_metadata
+        self._dw_conv_spec = np.squeeze(dw_conv_spec) # Remove singleton axes
+        self._dw_conv_metadata = dw_conv_metadata
+        self._dw_dark_shutter = float(dw_dark_metadata['shutter'])
+        self._dw_conv_shutter = float(dw_conv_metadata['shutter'])  
+    
+    def _get_scaled_dark_spec(self,input_dw_shutter:float) -> np.ndarray:
+        """ Scale dark current spectrum based on input spectrum shutter  """
+        scaled_dark_spec = (input_dw_shutter / self._dw_dark_shutter) * self._dw_dark_spec
+        # NOTE: Dark current is assumed to scale linearly with shutter.
+        # If the input spectrum has a higher shutter value than the calibration file, 
+        # the dark current spectrum is increased (multiplied with factor > 1).
+        return scaled_dark_spec
+
+    def _get_scaled_conv_spec(self,input_dw_shutter:float) -> np.ndarray:
+        """ Scale irradiance conversion spectrum based on input spectrum shutter """
+        scaled_conv_spec = (self._dw_conv_shutter / input_dw_shutter) * self._dw_conv_spec
+        # NOTE: The irradiance conversion spectrum is _inversely_ scaled with
+        # the input spectrum shutter. E.g., if the input spectrum has a higher shutter
+        # value than the calibration file (i.e. higher values per amount of photons), 
+        # the conversion spectrum values are decreased to account for this.
+        return scaled_conv_spec 
+    
+    def interpolate_dw_to_image_wl(self,dw_spec:np.ndarray,image_wl:np.ndarray,
+                                   insert_singleton_dims:bool = True) -> np.ndarray :
+        """ Interpolate downwelling spectrum to image wavelengths """
+        dw_spec_interp = np.interp(x=image_wl,xp=self._dw_wl, fp=np.squeeze(dw_spec))
+        if insert_singleton_dims:
+            dw_spec_interp = np.expand_dims(dw_spec_interp,axis=(0,1))
+        
+        return np.interp(x=image_wl,xp=self._dw_wl, fp=dw_spec)
+
+    
+
+    # def __init__(self, 
+    #              calibration_file: Union[Path,str],
+    #              calibration_dir_name: str = 'radiance_calibration_frames'):
+    #     """ Un-zip calibration file and create radiance calibration dataset 
+        
+    #     Arguments:
+    #     ----------
+    #     calibration_file: Path | str
+    #         Path to *.icp Resonon "Imager Calibration Pack" file
+    #     calibration_dir_name: str
+    #         Name of subdirectory into which calibration frames are unzipped
+
+    #     Raises:
+    #     -------
+    #     zipfile.BadZipfile:
+    #         If given *.icp file is not a valid zip file
+        
+    #     """
+    #     # Register image calibration "pack" (*.icp) and check that it exists
+    #     self.calibration_file = Path(calibration_file)
+    #     assert self.calibration_file.exists()
+
+    #     # Unzip into same directory 
+    #     self.calibration_dir = self.calibration_file.parent / calibration_dir_name
+    #     self.calibration_dir.mkdir(exist_ok=True)
+    #     self._unzip_calibration_file()
+
+    #     # Register (single) gain curve file and multiple dark frame files
+    #     self.gain_file_path = self.calibration_dir / 'gain.bip.hdr'
+    #     assert self.gain_file_path.exists()
+    #     self.dark_frame_paths = list(self.calibration_dir.glob('offset*gain*shutter.bip.hdr'))
+
+    #     # Get dark frame gain and shutter info from filenames
+    #     self._get_dark_frames_gain_shutter()
+
+    #     # Sort gain/shutter values and corresponding filenames 
+    #     self._sort_dark_frame_gains_shutters_paths()
+
+class RadianceBatchConverter:
+
+    def __init__(self,raw_data_dir):
+        pass
+
+        # icp_files = [self.raw_data_dir.glob('*.icp')]
+        # if len(icp_files) == 0:
+        #     raise FileNotFoundError(f'No calibration file (*.icp) found in {self.raw_data_dir}')
+        # elif len(icp_files) > 1:
+        #     raise ValueError(f'More than one calibration file (*.icp) found in {self.raw_data_dir}')
+        # self.radiance_calibration_file = icp_files[0]
+
+
