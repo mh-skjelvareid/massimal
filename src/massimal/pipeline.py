@@ -548,7 +548,7 @@ class RadianceConverter:
         radiance_image = (raw_image - dark_frame) * rad_conv_frame
 
         # Set negative (non-physical) values to zero
-        radiance_image[radiance_image>0] = 0
+        radiance_image[radiance_image<0] = 0
 
         # Convert to 16-bit integer format (more efficient for storage)
         return radiance_image.astype(np.int16)
