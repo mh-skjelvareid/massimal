@@ -652,6 +652,8 @@ class ReflectanceConverter:
             dw_spec_interp = np.expand_dims(dw_spec_interp,axis=(0,1))
         
         return np.interp(x=image_wl,xp=self._dw_wl, fp=dw_spec)
+    
+    # Use A-band for calibrating image wavelengths?
 
     
 
