@@ -4,7 +4,7 @@ import zipfile
 import numpy as np
 from typing import Union
 from pathlib import Path
-from scipy.signal import savgol_filter
+from scipy.signal import savgol_filter, gaussian_filter1d
 
 
 def read_envi(header_path: Union[Path,str], 
@@ -57,7 +57,13 @@ def read_envi(header_path: Union[Path,str],
                     file.write('byte order = 0\n')
             except OSError:
                 print(f'Error writing to header file {header_path}')
-            im_handle = spectral.io.envi.open(header_path,image_path)
+            try:
+                im_handle = spectral.io.envi.open(header_path,image_path)
+            except Exception as e:
+                print(f'Unsucessful - error reading modified header file {header_path}')
+                print(e)
+                return
+            print(f'Successfully read modified header file {header_path}')
             
     # Read wavelengths
     if 'wavelength' in im_handle.metadata:
@@ -568,14 +574,15 @@ class RadianceConverter:
         save_envi(radiance_header_path,radiance_image,raw_image_metadata)
 
 
-class ReflectanceConverter:
-    """ A class for converting images from Resonon Pika L cameras to reflectance 
-    
-    """
+class IrradianceConverter:
 
     def __init__(self,
-                 dw_cal_file:Union[Path,str],
-                 dw_cal_dir_name:str = 'downwelling_calibration_spectra') -> None:
+                dw_cal_file:Union[Path,str],
+                dw_cal_dir_name:str = 'downwelling_calibration_spectra',
+                wl_min:Union[int,float,None] = 380,
+                wl_max:Union[int,float,None] = 950):
+        
+        # Save calibration file path
         self.dw_cal_file = Path(dw_cal_file)
         assert self.dw_cal_file.exists()
 
@@ -587,12 +594,18 @@ class ReflectanceConverter:
         # Load calibration data
         self._load_dw_dark_and_conversion_spectra()
 
+        # Set valid wavelength range
+        self.wl_min = self._dw_wl[0] if wl_min is None else wl_min
+        self.wl_max = self._dw_wl[-1] if wl_max is None else wl_max
+        self._valid_wl_ind = (self._dw_wl >= wl_min) & (self._dw_wl <= wl_max)
+
 
     def _unzip_dw_cal_file(self,unzip_into_nonempty_dir:bool=False) -> None:
         """ Unzip *.dcp file (which is a zip file) """
         if not unzip_into_nonempty_dir and any(list(self.dw_cal_dir.iterdir())): 
             print(f'INFO: Non-empty downwelling calibration directory {self.dw_cal_dir}')
-            print(f'INFO: Skipping unzipping of downwelling calibration file, assuming unzipping already done.') 
+            print(f'INFO: Skipping unzipping of downwelling calibration file, '
+                  'assuming unzipping already done.') 
             return
         try:
             with zipfile.ZipFile(self.dw_cal_file, mode='r') as zip_file:
@@ -601,7 +614,7 @@ class ReflectanceConverter:
         except zipfile.BadZipFile:
             print(f'File {self.dw_cal_file} is not a valid ZIP file.')
         except Exception as e:
-            print('An unexpected error occured when extracting calibration file '
+            print('An unexpected error occured when extracting downwelling calibration file '
                     f'{self.dw_cal_file}')
             print(e)
 
@@ -627,31 +640,97 @@ class ReflectanceConverter:
         self._dw_dark_shutter = float(dw_dark_metadata['shutter'])
         self._dw_conv_shutter = float(dw_conv_metadata['shutter'])  
     
-    def _get_scaled_dark_spec(self,input_dw_shutter:float) -> np.ndarray:
-        """ Scale dark current spectrum based on input spectrum shutter  """
-        scaled_dark_spec = (input_dw_shutter / self._dw_dark_shutter) * self._dw_dark_spec
-        # NOTE: Dark current is assumed to scale linearly with shutter.
-        # If the input spectrum has a higher shutter value than the calibration file, 
-        # the dark current spectrum is increased (multiplied with factor > 1).
-        return scaled_dark_spec
-
-    def _get_scaled_conv_spec(self,input_dw_shutter:float) -> np.ndarray:
-        """ Scale irradiance conversion spectrum based on input spectrum shutter """
-        scaled_conv_spec = (self._dw_conv_shutter / input_dw_shutter) * self._dw_conv_spec
-        # NOTE: The irradiance conversion spectrum is _inversely_ scaled with
-        # the input spectrum shutter. E.g., if the input spectrum has a higher shutter
-        # value than the calibration file (i.e. higher values per amount of photons), 
-        # the conversion spectrum values are decreased to account for this.
-        return scaled_conv_spec 
     
-    def interpolate_dw_to_image_wl(self,dw_spec:np.ndarray,image_wl:np.ndarray,
-                                   insert_singleton_dims:bool = True) -> np.ndarray :
-        """ Interpolate downwelling spectrum to image wavelengths """
-        dw_spec_interp = np.interp(x=image_wl,xp=self._dw_wl, fp=np.squeeze(dw_spec))
-        if insert_singleton_dims:
-            dw_spec_interp = np.expand_dims(dw_spec_interp,axis=(0,1))
+    def calibrate_downwelling_spectrum(self,
+                                       input_dw_spec:np.ndarray,
+                                       input_dw_metadata:np.ndarray
+                                       ) -> tuple[np.ndarray,np.ndarray]:
+        """
         
-        return np.interp(x=image_wl,xp=self._dw_wl, fp=dw_spec)
+        Returns:
+        --------
+        irradiance_spectrum: np.ndarray
+            Spectrom converted to spectral irradiance in units (TODO: check units)
+        wl:
+            Wavelengths for each element in irradiance spectrum
+
+        Notes:
+        -------
+        The irradiance conversion spectrum is _inversely_ scaled with
+        the input spectrum shutter. E.g., if the input spectrum has a higher shutter
+        value than the calibration file (i.e. higher values per amount of photons), 
+        the conversion spectrum values are decreased to account for this.
+        Dark current is assumed to be independent of shutter value.
+        """
+
+        # Scale conversion spectrum accoring to difference in shutter values
+        input_dw_shutter = float(input_dw_metadata['shutter'])
+        scaled_conv_spec = (self._dw_conv_shutter / input_dw_shutter) * self._dw_conv_spec
+
+        # Subtract dark current, convert to (TODO: check units)
+        calibrated_dw_spec = (input_dw_spec - self._dw_dark_spec)*scaled_conv_spec
+        
+        # Limit to valid wavelengths
+        valid_wl = self._dw_wl[self._valid_wl_ind]
+        calibrated_dw_spec = calibrated_dw_spec[self._valid_wl_ind]
+
+        return calibrated_dw_spec, valid_wl
+
+
+
+class ReflectanceConverter:
+    """ A class for converting images from Resonon Pika L cameras to reflectance 
+    
+    """
+    def __init__(self,
+                 min_wl:Union[int,float] = 400,
+                 max_wl:Union[int,float] = 930):
+        pass
+
+    def conv_spec_with_gaussian(self,spectrum,wl,gauss_fwhm):
+        pass
+    
+    def _interpolate_dw_to_image_wl(self,
+                                   dw_spec:np.ndarray,
+                                   dw_wl:np.ndarray,
+                                   image_wl:np.ndarray,
+                                   convolve_irradiance_with_gaussian:bool=True,
+                                   gaussian_fwhm:float=2.7
+                                   ) -> np.ndarray :
+        """ Interpolate downwelling spectrum to image wavelengths """
+
+        # Convolve with gaussian to simulate same FWHM as image (optional)
+        if convolve_irradiance_with_gaussian:
+            sigma_wl = gaussian_fwhm*0.588705  # sigma = FWHM / 2*sqrt(2*ln(2))
+            dw_dwl = np.mean(np.diff(dw_wl))   # Downwelling wavelength sampling dist.
+            sigma_pix = sigma_wl / dw_dwl      # Sigma in units of spectral samples 
+            dw_spec = gaussian_filter1d(input=dw_spec,sigma=sigma_pix,mode='nearest')
+
+        dw_spec_interp = np.interp(x=image_wl,xp=self._dw_wl, fp=dw_spec)
+        
+        return dw_spec_interp
+    
+    def rad_im_to_refl_im(self,
+                            rad_image:np.ndarray,
+                            dw_spec:np.ndarray):
+        """ Convert radiance image to reflectance using downwelling spectrum """
+
+        # Check that spectrum is 1D, then expand to 3D for broadcasting
+        dw_spec = np.squeeze(dw_spec)
+        assert dw_spec.ndim == 1
+
+
+        dw_spec_interp = np.expand_dims(dw_spec_interp,axis=(0,1))        
+                
+        dw_spec_interp = np.expand_dims(dw_spec_interp,axis=(0,1))
+        assert rad_image.ndim == 3
+        assert rad_image.ndim == 3
+
+    def rad_file_to_refl_file(self,
+                                     radiance_image_header:Union[Path,str],
+                                     irradiance_header:Union[Path,str]):
+        # TODO: Pass gaussian kernel info to radiance_to_reflectance_image
+        pass
     
     # Use A-band for calibrating image wavelengths?
 
