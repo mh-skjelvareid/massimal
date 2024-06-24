@@ -2,9 +2,11 @@
 import spectral
 import zipfile
 import numpy as np
+from numpy.polynomial import Polynomial
 from typing import Union
 from pathlib import Path
-from scipy.signal import savgol_filter, gaussian_filter1d
+from scipy.signal import savgol_filter, find_peaks, medfilt
+from scipy.ndimage import gaussian_filter1d
 
 
 def read_envi(header_path: Union[Path,str], 
@@ -167,6 +169,10 @@ def bin_image(image:np.ndarray,
         image = np.sum(image,axis=(1,3,5))
 
     return image
+
+def closest_wl_index(wl_array,target_wl):
+    """ Get index in sampled wavelength array closest to target wavelength """
+    return np.argmin(abs(wl_array-target_wl)) 
 
 
 class RadianceCalibrationDataset:
@@ -639,6 +645,71 @@ class IrradianceConverter:
         self._dw_conv_metadata = dw_conv_metadata
         self._dw_dark_shutter = float(dw_dark_metadata['shutter'])
         self._dw_conv_shutter = float(dw_conv_metadata['shutter'])  
+
+    def get_absorption_peak_spectrum(self,spec,medfilt_kernel_size=101):
+        """ Create absorption peak spectrum based from absorption "dip" spectrum """
+        background_spec = medfilt(spec,kernel_size=medfilt_kernel_size)
+        return -(spec-background_spec)
+    
+
+    def detect_absorption_peaks(self,spec:np.ndarray,wl:np.ndarray,
+                                distance:int=20,width:int=5,
+                                rel_prominence:float=0.1):
+        """ Detect absorption peaks/lines using local peak detection """
+        wl_550_ind = closest_wl_index(wl,550)
+        print(f'{wl_550_ind=}')
+        prominence = spec[wl_550_ind]*rel_prominence
+        print(f'{prominence=}')
+        peak_spec = self.get_absorption_peak_spectrum(spec)
+        print(f'{np.min(peak_spec)=}, {np.max(peak_spec)=}')
+        peak_indices, peak_properties = find_peaks(peak_spec, distance=distance,width=width,
+                                prominence=prominence)
+        return peak_indices, peak_properties
+    
+    def fraunhofer_calibrate_wl(self,spec,orig_wl,wl_win_width=20):
+        # Define search window for each peak
+        fraunhofer_wls = {'L':382.04,
+                        'G':430.78,
+                        'F':486.13,
+                        'b1':518.36,
+                        'D':589.30,
+                        'C':656.28,
+                        'B':686.72,
+                        'A':760.30,   # Not well defined (O2 band), approximate
+                        'Z':822.70}
+
+        peak_indices = self.detect_absorption_peaks(spec)
+
+        fh_sample_x = []
+        fh_wl_y = []
+        for fh_line_wl in fraunhofer_wls.values():
+            # Find index of closest sample to Fraunhofer wavelength
+            fh_wl_ind = closest_wl_index(orig_wl,fh_line_wl)
+
+            # Calculate half window width in samples at current wavelength
+            wl_resolution = (orig_wl[fh_wl_ind+1]-orig_wl[fh_wl_ind])
+            win_half_width = round((0.5*wl_win_width)/wl_resolution)
+
+            # Calculate edges of search window
+            win_low = fh_wl_ind - win_half_width
+            win_high = fh_wl_ind + win_half_width
+
+            # Find peaks within search window, accept if single peak found
+            peaks_in_window = peak_indices[(peak_indices>=win_low) & (peak_indices<=win_high)]
+            if len(peaks_in_window)==1:
+                fh_sample_x.append(peaks_in_window[0])
+                fh_wl_y.append(fh_line_wl)
+
+        if len(fh_sample_x) < 3:
+            print('Too low data quality: Less than 3 absorption peaks found.')
+            return
+
+        polynomial_fitted = Polynomial.fit(fh_sample_x,fh_wl_y,deg=2,domain=[])
+        wl_cal = polynomial_fitted(np.arange(len(orig_wl)))
+        wl_poly_coeff = polynomial_fitted.coef
+
+        return wl_cal, wl_poly_coeff
+        
     
     
     def calibrate_downwelling_spectrum(self,
