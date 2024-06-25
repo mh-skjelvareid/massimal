@@ -7,6 +7,7 @@ from typing import Union, Iterable
 from pathlib import Path
 from scipy.signal import savgol_filter, find_peaks, medfilt
 from scipy.ndimage import gaussian_filter1d
+import math
 
 
 def read_envi(
@@ -87,7 +88,7 @@ def save_envi(
     header_path: Union[Path, str],
     image: np.ndarray,
     metadata: dict,
-    dtype: Union[np.dtype, str, None] = None,
+    **kwargs
 ) -> None:
     """Save ENVI file with parameters compatible with Spectronon
 
@@ -114,12 +115,9 @@ def save_envi(
         If None, dtype = image.dtype
     """
 
-    if dtype is None:
-        dtype = image.dtype
-
     # Save file
     spectral.envi.save_image(
-        header_path, image, dtype=dtype, metadata=metadata, force=True, ext=None
+        header_path, image, metadata=metadata, force=True, ext=None, **kwargs
     )
 
 
@@ -547,7 +545,9 @@ class RadianceConverter:
         return rad_conv_frame
 
     def convert_raw_image_to_radiance(
-        self, raw_image: np.ndarray, raw_image_metadata: dict
+        self, raw_image: np.ndarray, raw_image_metadata: dict,
+        set_saturated_pixels_to_zero:bool = True,
+        saturation_value:int = 2**12-1
     ) -> np.ndarray:
         """Convert raw image (3d array) to radiance image
 
@@ -622,11 +622,16 @@ class RadianceConverter:
         # Set negative (non-physical) values to zero
         radiance_image[radiance_image < 0] = 0
 
+        # Set saturated pixels to zero (optional)
+        if set_saturated_pixels_to_zero:
+            radiance_image[np.any(radiance_image>=saturation_value,axis=2)] = 0
+
         # Convert to 16-bit integer format (more efficient for storage)
-        return radiance_image.astype(np.int16)
+        return radiance_image.astype(np.uint16)
 
     def convert_raw_file_to_radiance(
-        self, raw_header_path: Union[Path, str], radiance_header_path: Union[Path, str]
+        self, raw_header_path: Union[Path, str], radiance_header_path: Union[Path, str],
+        interleave:str='bip'
     ) -> None:
         """Read raw image file, convert to radiance, and save to file
 
@@ -636,6 +641,14 @@ class RadianceConverter:
             Path to raw hyperspectral image acquired with Resonon Pika L camera.
         radiance_header_path: Path | str
             Path to save converted radiance image to.
+            The name of the header file should match the 'interleave' argument
+            (default: bip), e.g. 'radiance_image.bip.hdr'
+
+        Keyword arguments:
+        ------------------
+        interleave: str, {'bip','bil','bsq'}
+            String inticating how binary image file is organized.
+            See spectral.io.envi.save_image()
 
         # Notes:
         --------
@@ -645,7 +658,8 @@ class RadianceConverter:
         radiance_image = self.convert_raw_image_to_radiance(
             raw_image, raw_image_metadata
         )
-        save_envi(radiance_header_path, radiance_image, raw_image_metadata)
+        save_envi(radiance_header_path, radiance_image, raw_image_metadata,
+                  interleave=interleave)
 
 
 class WavelengthCalibrator:
@@ -777,8 +791,11 @@ class WavelengthCalibrator:
         if len(fh_line_indices) < 3:
             raise ValueError("Too low data quality: Less than 3 absorption lines found.")
         wl_cal, wl_poly_coeff = self.fit_wavelength_polynomial(fh_line_indices,fh_wavelengths, len(wl_orig))
+
+        self._fh_line_indices = fh_line_indices
+        self._fh_wavelengths = fh_wavelengths
         self.wl_cal = wl_cal
-        self.wl_poly_coeff = wl_poly_coeff
+        self._wl_poly_coeff = wl_poly_coeff
 
     def fit_batch(self,spectrum_header_paths:Iterable[Union[Path,str]]):
         """ Calibrate wavelength based on spectrum with highest SNR (among many)
@@ -844,34 +861,34 @@ class IrradianceConverter:
 
     def __init__(
         self,
-        dw_cal_file: Union[Path, str],
-        dw_cal_dir_name: str = "downwelling_calibration_spectra",
+        irrad_cal_file: Union[Path, str],
+        irrad_cal_dir_name: str = "downwelling_calibration_spectra",
         wl_min: Union[int, float, None] = 370,
-        wl_max: Union[int, float, None] = 950,
+        wl_max: Union[int, float, None] = 1000,
     ):
 
         # Save calibration file path
-        self.dw_cal_file = Path(dw_cal_file)
-        assert self.dw_cal_file.exists()
+        self.irrad_cal_file = Path(irrad_cal_file)
+        assert self.irrad_cal_file.exists()
 
         # Unzip calibration frames into subdirectory
-        self.dw_cal_dir = self.dw_cal_file.parent / dw_cal_dir_name
-        self.dw_cal_dir.mkdir(exist_ok=True)
-        self._unzip_dw_cal_file()
+        self.irrad_cal_dir = self.irrad_cal_file.parent / irrad_cal_dir_name
+        self.irrad_cal_dir.mkdir(exist_ok=True)
+        self._unzip_irrad_cal_file()
 
         # Load calibration data
-        self._load_dw_dark_and_conversion_spectra()
+        self._load_cal_dark_and_sensitivity_spectra()
 
         # Set valid wavelength range
-        self.wl_min = self._dw_wl[0] if wl_min is None else wl_min
-        self.wl_max = self._dw_wl[-1] if wl_max is None else wl_max
-        self._valid_wl_ind = (self._dw_wl >= wl_min) & (self._dw_wl <= wl_max)
+        self.wl_min = self._irrad_wl[0] if wl_min is None else wl_min
+        self.wl_max = self._irrad_wl[-1] if wl_max is None else wl_max
+        self._valid_wl_ind = (self._irrad_wl >= wl_min) & (self._irrad_wl <= wl_max)
 
-    def _unzip_dw_cal_file(self, unzip_into_nonempty_dir: bool = False) -> None:
+    def _unzip_irrad_cal_file(self, unzip_into_nonempty_dir: bool = False) -> None:
         """Unzip *.dcp file (which is a zip file)"""
-        if not unzip_into_nonempty_dir and any(list(self.dw_cal_dir.iterdir())):
+        if not unzip_into_nonempty_dir and any(list(self.irrad_cal_dir.iterdir())):
             print(
-                f"INFO: Non-empty downwelling calibration directory {self.dw_cal_dir}"
+                f"INFO: Non-empty downwelling calibration directory {self.irrad_cal_dir}"
             )
             print(
                 f"INFO: Skipping unzipping of downwelling calibration file, "
@@ -879,169 +896,163 @@ class IrradianceConverter:
             )
             return
         try:
-            with zipfile.ZipFile(self.dw_cal_file, mode="r") as zip_file:
+            with zipfile.ZipFile(self.irrad_cal_file, mode="r") as zip_file:
                 for filename in zip_file.namelist():
-                    zip_file.extract(filename, self.dw_cal_dir)
+                    zip_file.extract(filename, self.irrad_cal_dir)
         except zipfile.BadZipFile:
-            print(f"File {self.dw_cal_file} is not a valid ZIP file.")
+            print(f"File {self.irrad_cal_file} is not a valid ZIP file.")
         except Exception as e:
             print(
                 "An unexpected error occured when extracting downwelling calibration file "
-                f"{self.dw_cal_file}"
+                f"{self.irrad_cal_file}"
             )
             print(e)
 
-    def _load_dw_dark_and_conversion_spectra(self):
-        """Load dark current and irradiance conversion spectra from cal. files"""
+    def _load_cal_dark_and_sensitivity_spectra(self):
+        """Load dark current and irradiance sensitivity spectra from cal. files"""
         # Define paths
-        dw_dark_path = self.dw_cal_dir / "offset.spec.hdr"
-        dw_conv_path = self.dw_cal_dir / "gain.spec.hdr"
-        assert dw_dark_path.exists()
-        assert dw_conv_path.exists()
+        cal_dark_path = self.irrad_cal_dir / "offset.spec.hdr"
+        irrad_sens_path = self.irrad_cal_dir / "gain.spec.hdr"
+        assert cal_dark_path.exists()
+        assert irrad_sens_path.exists()
 
         # Read from files
-        dw_dark_spec, dw_dark_wl, dw_dark_metadata = read_envi(dw_dark_path)
-        dw_conv_spec, dw_conv_wl, dw_conv_metadata = read_envi(dw_conv_path)
+        cal_dark_spec, cal_dark_wl, cal_dark_metadata = read_envi(cal_dark_path)
+        irrad_sens_spec, irrad_sens_wl, irrad_sens_metadata = read_envi(irrad_sens_path)
 
         # Save attributes
-        assert np.array_equal(dw_dark_wl, dw_conv_wl)
-        self._dw_wl = dw_dark_wl
-        self._dw_dark_spec = np.squeeze(dw_dark_spec)  # Remove singleton axes
-        self._dw_dark_metadata = dw_dark_metadata
-        self._dw_conv_spec = np.squeeze(dw_conv_spec)  # Remove singleton axes
-        self._dw_conv_metadata = dw_conv_metadata
-        self._dw_dark_shutter = float(dw_dark_metadata["shutter"])
-        self._dw_conv_shutter = float(dw_conv_metadata["shutter"])
+        assert np.array_equal(cal_dark_wl, irrad_sens_wl)
+        self._irrad_wl = cal_dark_wl
+        self._cal_dark_spec = np.squeeze(cal_dark_spec)  # Remove singleton axes
+        self._cal_dark_metadata = cal_dark_metadata
+        self._irrad_sens_spec = np.squeeze(irrad_sens_spec)  # Remove singleton axes
+        self._irrad_sens_metadata = irrad_sens_metadata
+        self._cal_dark_shutter = float(cal_dark_metadata["shutter"])
+        self._irrad_sens_shutter = float(irrad_sens_metadata["shutter"])
 
-    def calibrate_downwelling_spectrum(
-        self, input_dw_spec: np.ndarray, input_dw_metadata: np.ndarray
+    def convert_raw_spectrum_to_irradiance(
+        self, raw_spec: np.ndarray, raw_metadata: np.ndarray,
+        set_irradiance_outside_wl_limits_to_zero:bool = True,
+        keep_original_dimensions:bool=True
     ) -> tuple[np.ndarray, np.ndarray]:
         """
 
         Returns:
         --------
-        irradiance_spectrum: np.ndarray
+        irradiance_spectrum: np.ndarray, shape (n_wl,)
             Spectrom converted to spectral irradiance in units (TODO: check units)
-        wl:
+        wl: np.ndarray, shape (n_wl,)
             Wavelengths for each element in irradiance spectrum
 
         Notes:
         -------
-        The irradiance conversion spectrum is _inversely_ scaled with
+        The irradiance sensitivity spectrum is _inversely_ scaled with
         the input spectrum shutter. E.g., if the input spectrum has a higher shutter
         value than the calibration file (i.e. higher values per amount of photons),
-        the conversion spectrum values are decreased to account for this.
+        the sensitivity spectrum values are decreased to account for this.
         Dark current is assumed to be independent of shutter value.
         """
+        
+        original_input_dimensions = raw_spec.shape
+        raw_spec = np.squeeze(raw_spec)
 
-        # Scale conversion spectrum according to difference in shutter values
-        input_dw_shutter = float(input_dw_metadata["shutter"])
-        scaled_conv_spec = (
-            self._dw_conv_shutter / input_dw_shutter
-        ) * self._dw_conv_spec
+        if raw_spec.ndim > 1:
+            raise ValueError('Raw irradiance spectrum must be a 1D array.')
+
+        # Scale sensitivity spectrum according to difference in shutter values
+        raw_shutter = float(raw_metadata["shutter"])
+        scaled_sens_spec = (
+            self._irrad_sens_shutter / raw_shutter
+        ) * self._irrad_sens_spec
 
         # Subtract dark current, convert to irradiance (TODO: Double-check physical units)
-        calibrated_dw_spec = (input_dw_spec - self._dw_dark_spec) * scaled_conv_spec
+        cal_irrad_spec = (raw_spec - self._cal_dark_spec) * scaled_sens_spec
 
-        # Limit to valid wavelengths
-        valid_wl = self._dw_wl[self._valid_wl_ind]
-        calibrated_dw_spec = calibrated_dw_spec[self._valid_wl_ind]
+        # Set spectrum outside wavelength limits to zero
+        if set_irradiance_outside_wl_limits_to_zero:
+            cal_irrad_spec[~self._valid_wl_ind] = 0
 
-        return calibrated_dw_spec, valid_wl
+        if keep_original_dimensions:
+            cal_irrad_spec = np.reshape(cal_irrad_spec,original_input_dimensions)
+
+        return cal_irrad_spec
+    
+    def convert_raw_file_to_irradiance(self,raw_spec_path:Union[Path,str],
+                                       irrad_spec_path:Union[Path,str]):
+        """ Read raw spectrum, convert to irradiance, and save """
+        raw_spec,_,raw_metadata = read_envi(raw_spec_path)
+        irrad_spec = self.convert_raw_spectrum_to_irradiance(raw_spec,raw_metadata)
+        save_envi(irrad_spec_path,irrad_spec,raw_metadata)
+
 
 
 class ReflectanceConverter:
     """A class for converting images from Resonon Pika L cameras to reflectance"""
 
     def __init__(
-        self, min_wl: Union[int, float] = 400, max_wl: Union[int, float] = 930
+        self, wl_min: Union[int, float] = 400, wl_max: Union[int, float] = 930
     ):
-        pass
+        self.wl_min = float(wl_min)
+        self.wl_max = float(wl_max)
 
-    def conv_spec_with_gaussian(self, spectrum, wl, gauss_fwhm):
-        pass
+    @staticmethod
+    def conv_spec_with_gaussian(spec, wl, gauss_fwhm):
+        sigma_wl = gauss_fwhm * 0.588705  # sigma = FWHM / 2*sqrt(2*ln(2))
+        dwl = np.mean(np.diff(wl))  # Downwelling wavelength sampling dist.
+        sigma_pix = sigma_wl / dwl  # Sigma in units of spectral samples
+        spec_filtered = gaussian_filter1d(input=spec, sigma=sigma_pix, mode="nearest")
+        return spec_filtered
 
-    def _interpolate_dw_to_image_wl(
-        self,
-        dw_spec: np.ndarray,
-        dw_wl: np.ndarray,
+    @staticmethod
+    def interpolate_irrad_to_image_wl(
+        irrad_spec: np.ndarray,
+        irrad_wl: np.ndarray,
         image_wl: np.ndarray,
-        convolve_irradiance_with_gaussian: bool = True,
-        gaussian_fwhm: float = 2.7,
     ) -> np.ndarray:
         """Interpolate downwelling spectrum to image wavelengths"""
+        return np.interp(x=image_wl, xp=irrad_wl, fp=irrad_spec)
 
-        # Convolve with gaussian to simulate same FWHM as image (optional)
-        if convolve_irradiance_with_gaussian:
-            sigma_wl = gaussian_fwhm * 0.588705  # sigma = FWHM / 2*sqrt(2*ln(2))
-            dw_dwl = np.mean(np.diff(dw_wl))  # Downwelling wavelength sampling dist.
-            sigma_pix = sigma_wl / dw_dwl  # Sigma in units of spectral samples
-            dw_spec = gaussian_filter1d(input=dw_spec, sigma=sigma_pix, mode="nearest")
-
-        dw_spec_interp = np.interp(x=image_wl, xp=self._dw_wl, fp=dw_spec)
-
-        return dw_spec_interp
-
-    def rad_im_to_refl_im(self, rad_image: np.ndarray, dw_spec: np.ndarray):
+    def rad_im_to_refl_im(self, 
+                          rad_image: np.ndarray, 
+                          rad_wl: np.ndarray,
+                          irrad_spec: np.ndarray,
+                          irrad_wl: np.ndarray,
+                          convolve_irradiance_with_gaussian: bool = True,
+                          gauss_fwhm: float = 2.7,
+                          **kwargs):
         """Convert radiance image to reflectance using downwelling spectrum"""
 
         # Check that spectrum is 1D, then expand to 3D for broadcasting
-        dw_spec = np.squeeze(dw_spec)
-        assert dw_spec.ndim == 1
+        irrad_spec = np.squeeze(irrad_spec)
+        assert irrad_spec.ndim == 1
 
-        dw_spec_interp = np.expand_dims(dw_spec_interp, axis=(0, 1))
+        # Limit output wavelength range
+        valid_image_wl_ind = (rad_wl>=self.wl_min) & (rad_wl<=self.wl_max)
+        rad_wl = rad_wl[valid_image_wl_ind]
+        rad_image = rad_image[:,:,valid_image_wl_ind]
 
-        dw_spec_interp = np.expand_dims(dw_spec_interp, axis=(0, 1))
-        assert rad_image.ndim == 3
-        assert rad_image.ndim == 3
+        # Make irradiance spectrum compatible with image
+        if convolve_irradiance_with_gaussian:
+            irrad_spec = self.conv_spec_with_gaussian(irrad_spec,irrad_wl, gauss_fwhm)
+        irrad_spec = self.interpolate_irrad_to_image_wl(irrad_spec,irrad_wl,rad_wl)
+        irrad_spec = np.expand_dims(irrad_spec, axis=(0, 1))
+
+        # Convert to reflectance, assuming Lambertian (perfectly diffuse) surface
+        refl_image = math.pi * (rad_image / irrad_spec)
+        return refl_image
+
 
     def rad_file_to_refl_file(
         self,
         radiance_image_header: Union[Path, str],
         irradiance_header: Union[Path, str],
+        **kwargs
     ):
         # TODO: Pass gaussian kernel info to radiance_to_reflectance_image
-        pass
+        refl_image = rad_im_to_refl_im(rad_image,rad_wl,irrad_spec,irrad_wl,**kwargs)
+        
 
-    # Use A-band for calibrating image wavelengths?
 
-    # def __init__(self,
-    #              calibration_file: Union[Path,str],
-    #              calibration_dir_name: str = 'radiance_calibration_frames'):
-    #     """ Un-zip calibration file and create radiance calibration dataset
-
-    #     Arguments:
-    #     ----------
-    #     calibration_file: Path | str
-    #         Path to *.icp Resonon "Imager Calibration Pack" file
-    #     calibration_dir_name: str
-    #         Name of subdirectory into which calibration frames are unzipped
-
-    #     Raises:
-    #     -------
-    #     zipfile.BadZipfile:
-    #         If given *.icp file is not a valid zip file
-
-    #     """
-    #     # Register image calibration "pack" (*.icp) and check that it exists
-    #     self.calibration_file = Path(calibration_file)
-    #     assert self.calibration_file.exists()
-
-    #     # Unzip into same directory
-    #     self.calibration_dir = self.calibration_file.parent / calibration_dir_name
-    #     self.calibration_dir.mkdir(exist_ok=True)
-    #     self._unzip_calibration_file()
-
-    #     # Register (single) gain curve file and multiple dark frame files
-    #     self.gain_file_path = self.calibration_dir / 'gain.bip.hdr'
-    #     assert self.gain_file_path.exists()
-    #     self.dark_frame_paths = list(self.calibration_dir.glob('offset*gain*shutter.bip.hdr'))
-
-    #     # Get dark frame gain and shutter info from filenames
-    #     self._get_dark_frames_gain_shutter()
-
-    #     # Sort gain/shutter values and corresponding filenames
-    #     self._sort_dark_frame_gains_shutters_paths()
 
 
 class RadianceBatchConverter:
