@@ -3,7 +3,7 @@ import spectral
 import zipfile
 import numpy as np
 from numpy.polynomial import Polynomial
-from typing import Union
+from typing import Union, Iterable
 from pathlib import Path
 from scipy.signal import savgol_filter, find_peaks, medfilt
 from scipy.ndimage import gaussian_filter1d
@@ -195,69 +195,7 @@ def closest_wl_index(wl_array, target_wl):
 #     return -(spec-background_spec)
 
 
-def detect_absorption_lines(
-    spec: np.ndarray,
-    wl: np.ndarray,
-    distance: int = 20,
-    width: int = 5,
-    rel_prominence: float = 0.1,
-):
-    """Detect absorption lines using local peak detection"""
-    wl_550_ind = closest_wl_index(wl, 550)
-    prominence = spec[wl_550_ind] * rel_prominence
-    peak_indices, peak_properties = find_peaks(
-        -spec, distance=distance, width=width, prominence=prominence
-    )
-    return peak_indices, peak_properties
 
-
-def fraunhofer_calibrate_wl(self, spec, orig_wl, wl_win_width=20):
-    # Define search window for each peak
-    fraunhofer_wls = {
-        "L": 382.04,
-        "G": 430.78,
-        "F": 486.13,
-        "b1": 518.36,
-        "D": 589.30,
-        "C": 656.28,
-        "B": 686.72,
-        "A": 760.30,  # Not well defined (O2 band), approximate
-        "Z": 822.70,
-    }
-
-    peak_indices = self.detect_absorption_peaks(spec)
-
-    fh_sample_x = []
-    fh_wl_y = []
-    for fh_line_wl in fraunhofer_wls.values():
-        # Find index of closest sample to Fraunhofer wavelength
-        fh_wl_ind = closest_wl_index(orig_wl, fh_line_wl)
-
-        # Calculate half window width in samples at current wavelength
-        wl_resolution = orig_wl[fh_wl_ind + 1] - orig_wl[fh_wl_ind]
-        win_half_width = round((0.5 * wl_win_width) / wl_resolution)
-
-        # Calculate edges of search window
-        win_low = fh_wl_ind - win_half_width
-        win_high = fh_wl_ind + win_half_width
-
-        # Find peaks within search window, accept if single peak found
-        peaks_in_window = peak_indices[
-            (peak_indices >= win_low) & (peak_indices <= win_high)
-        ]
-        if len(peaks_in_window) == 1:
-            fh_sample_x.append(peaks_in_window[0])
-            fh_wl_y.append(fh_line_wl)
-
-    if len(fh_sample_x) < 3:
-        print("Too low data quality: Less than 3 absorption peaks found.")
-        return
-
-    polynomial_fitted = Polynomial.fit(fh_sample_x, fh_wl_y, deg=2, domain=[])
-    wl_cal = polynomial_fitted(np.arange(len(orig_wl)))
-    wl_poly_coeff = polynomial_fitted.coef
-
-    return wl_cal, wl_poly_coeff
 
 
 class RadianceCalibrationDataset:
@@ -710,13 +648,205 @@ class RadianceConverter:
         save_envi(radiance_header_path, radiance_image, raw_image_metadata)
 
 
+class WavelengthCalibrator:
+
+    def __init__(self):
+        pass
+
+    @staticmethod
+    def detect_absorption_lines(
+        spec: np.ndarray,
+        wl: np.ndarray,
+        distance: int = 20,
+        width: int = 5,
+        rel_prominence: float = 0.1,
+    ):
+        """Detect absorption lines using local peak detection"""
+        wl_550_ind = closest_wl_index(wl, 550)
+        prominence = spec[wl_550_ind] * rel_prominence
+        peak_indices, peak_properties = find_peaks(
+            -spec, distance=distance, width=width, prominence=prominence
+        )
+        return peak_indices, peak_properties
+
+    @staticmethod
+    def fit_wavelength_polynomial(sample_indices:np.ndarray, wavelengths:np.ndarray, n_samples:int
+                                  ) -> tuple[np.ndarray,np.ndarray]:
+        """ Fit 2nd degree polynomial to set of (sample, wavelength) pairs 
+        
+        Arguments:
+        ----------
+        sample_indices: np.ndarray
+            Indices of samples in a sampled spectrum, typically for spectral
+            peaks / absorption lines with known wavelengths.
+        wavelengths: np.ndarray
+            Wavelengths (in physical units) corresponding to sample_indices.
+        n_samples: int
+            Total number of samples in sampled spectrum
+
+        Returns:
+        --------
+        wl_cal:
+            Array of (calibrated) wavelengths, shape (n_samples,)
+        wl_poly_coeff:
+            Coefficients for 2nd degree polynomial, ordered from degree zero upward
+            (index corresponds to polynomial degree)
+        
+        """
+        polynomial_fitted = Polynomial.fit(sample_indices, wavelengths, deg=2, domain=[])
+        wl_cal = polynomial_fitted(np.arange(n_samples))
+        wl_poly_coeff = polynomial_fitted.coef
+        return wl_cal, wl_poly_coeff
+    
+    @staticmethod
+    def filter_fraunhofer_lines(line_indices, orig_wl, win_width_nm=20):
+        """ Calibrate wavelength values from known Fraunhofer absorption lines
+
+        Arguments:
+        ----------
+        line_indices: np.ndarray
+            Indices of samples in spectrum where a (potential) absorption
+            line has been detected. Indices must be within the range 
+            (0, len(orig_wl))
+        orig_wl: np.ndarray
+            Original wavelength vector. Values are assumed to be "close enough"
+            to be used to create search windows for each Fraunhofer line,
+            typically within a few nm. Shape (n_samples,)
+        win_width_nm:
+            The width of the search windows in units of nanometers. 
+
+        Returns:
+        filtered_line_indices:
+            Indices for absorption lines found close to Fraunhofer line
+        fraunhofer_wavelengths:
+            Corresponding Fraunhofer line wavelengths for filtered absorption lines
+
+        """
+
+        fraunhofer_wls = {
+            "L": 382.04,
+            "G": 430.78,
+            "F": 486.13,
+            "b1": 518.36,
+            "D": 589.30,
+            "C": 656.28,
+            "B": 686.72,
+            "A": 760.30,  # Not well defined (O2 band), approximate
+            "Z": 822.70,
+        }
+
+        filtered_line_indices = []
+        fraunhofer_wavelengths = []
+        for fh_line_wl in fraunhofer_wls.values():
+            # Find index of closest sample to Fraunhofer wavelength
+            fh_wl_ind = closest_wl_index(orig_wl, fh_line_wl)
+
+            # Calculate half window width in samples at current wavelength
+            wl_resolution = orig_wl[fh_wl_ind + 1] - orig_wl[fh_wl_ind]
+            win_half_width = round((0.5 * win_width_nm) / wl_resolution)
+
+            # Calculate edges of search window
+            win_low = fh_wl_ind - win_half_width
+            win_high = fh_wl_ind + win_half_width
+
+            # Find lines within search window, accept if single peak found
+            peaks_in_window = line_indices[
+                (line_indices >= win_low) & (line_indices <= win_high)
+            ]
+            if len(peaks_in_window) == 1:
+                filtered_line_indices.append(peaks_in_window[0])
+                fraunhofer_wavelengths.append(fh_line_wl)
+
+        return filtered_line_indices, fraunhofer_wavelengths
+
+
+    def fit(self,spec:np.ndarray,wl_orig:np.ndarray) -> np.ndarray:
+        """ Detect absorption lines in spectrum and fit polynomial wavelength function 
+        
+        Arguments:
+        ----------
+        spec: np.ndarray
+            Sampled radiance/irradiance spectrum, shape (n_samples,)
+        wl_orig: np.ndarray
+            Wavelengths corresponding to spectral samples, shape (n_samples)
+            Wavelengths values are assumed to be close (within a few nm)
+            to their true values. 
+        """
+        line_indices, _ = self.detect_absorption_lines(spec,wl_orig)
+        fh_line_indices, fh_wavelengths = self.filter_fraunhofer_lines(line_indices, wl_orig)
+        if len(fh_line_indices) < 3:
+            raise ValueError("Too low data quality: Less than 3 absorption lines found.")
+        wl_cal, wl_poly_coeff = self.fit_wavelength_polynomial(fh_line_indices,fh_wavelengths, len(wl_orig))
+        self.wl_cal = wl_cal
+        self.wl_poly_coeff = wl_poly_coeff
+
+    def fit_batch(self,spectrum_header_paths:Iterable[Union[Path,str]]):
+        """ Calibrate wavelength based on spectrum with highest SNR (among many)
+        
+        Arguments:
+        ----------
+        spectrum_header_paths: Iterable[Path | str]
+            Paths to multiple spectra. The spectrum with the highest maximum 
+            value will be used for wavelength calibration.
+            Spectra are assumed to be ENVI files. 
+
+        """
+        spectra = []
+        for spectrum_path in spectrum_header_paths:
+            spectrum_path = Path(spectrum_path)
+            try:
+                spec,wl,_ = read_envi(spectrum_path)
+            except OSError as error:
+                print(f'Error opening spectrum {spectrum_path}')
+                print('Skipping spectrum.')
+            spectra.append(spec)
+
+        spectra = np.array(spectra)
+        cal_spec = spectra[np.argmax(np.max(spectra,axis=1))]
+        self.fit(cal_spec,wl) 
+
+    def update_header_wavelengths(self,header_paths:Iterable[Union[Path,str]]):
+        """ Update header files with calibrated wavelengths
+        
+        Arguments:
+        ----------
+        header_paths: Iterable[Path | str]
+            Iterable with paths multiple spectra. 
+
+        """
+        try:
+            wl_str = [f'{wl:.3f}' for wl in self.wl_cal] # Convert each number to string
+            wl_str = '{' + ', '.join(wl_str) + '}'       # Join into single string
+        except AttributeError as error:
+            print('Attribute wl_cal not present - fit (calibrate) first.')
+
+        for header_path in header_paths:
+            header_path = Path(header_path)
+            try:
+                header_dict = spectral.io.envi.read_envi_header(header_path)
+            except OSError as error:
+                print(f'Error opening header {header_path}')
+                print(error)
+                print('Skipping...')
+
+            header_dict['wavelength'] = wl_str
+            try:
+                spectral.io.envi.write_envi_header(header_path, header_dict)
+            except OSError as error:
+                print(f'Error updating header {header_path}')
+                print(error)
+                print('Skipping...')
+
+
+
+
 class IrradianceConverter:
 
     def __init__(
         self,
         dw_cal_file: Union[Path, str],
         dw_cal_dir_name: str = "downwelling_calibration_spectra",
-        wl_min: Union[int, float, None] = 380,
+        wl_min: Union[int, float, None] = 370,
         wl_max: Union[int, float, None] = 950,
     ):
 
@@ -804,13 +934,13 @@ class IrradianceConverter:
         Dark current is assumed to be independent of shutter value.
         """
 
-        # Scale conversion spectrum accoring to difference in shutter values
+        # Scale conversion spectrum according to difference in shutter values
         input_dw_shutter = float(input_dw_metadata["shutter"])
         scaled_conv_spec = (
             self._dw_conv_shutter / input_dw_shutter
         ) * self._dw_conv_spec
 
-        # Subtract dark current, convert to (TODO: check units)
+        # Subtract dark current, convert to irradiance (TODO: Double-check physical units)
         calibrated_dw_spec = (input_dw_spec - self._dw_dark_spec) * scaled_conv_spec
 
         # Limit to valid wavelengths
