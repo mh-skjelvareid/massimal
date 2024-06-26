@@ -85,10 +85,7 @@ def read_envi(
 
 
 def save_envi(
-    header_path: Union[Path, str],
-    image: np.ndarray,
-    metadata: dict,
-    **kwargs
+    header_path: Union[Path, str], image: np.ndarray, metadata: dict, **kwargs
 ) -> None:
     """Save ENVI file with parameters compatible with Spectronon
 
@@ -185,15 +182,6 @@ def bin_image(
 def closest_wl_index(wl_array, target_wl):
     """Get index in sampled wavelength array closest to target wavelength"""
     return np.argmin(abs(wl_array - target_wl))
-
-
-# def get_absorption_peak_spectrum(self,spec,medfilt_kernel_size=101):
-#     """ Create absorption peak spectrum based from absorption "dip" spectrum """
-#     background_spec = medfilt(spec,kernel_size=medfilt_kernel_size)
-#     return -(spec-background_spec)
-
-
-
 
 
 class RadianceCalibrationDataset:
@@ -545,9 +533,11 @@ class RadianceConverter:
         return rad_conv_frame
 
     def convert_raw_image_to_radiance(
-        self, raw_image: np.ndarray, raw_image_metadata: dict,
-        set_saturated_pixels_to_zero:bool = True,
-        saturation_value:int = 2**12-1
+        self,
+        raw_image: np.ndarray,
+        raw_image_metadata: dict,
+        set_saturated_pixels_to_zero: bool = True,
+        saturation_value: int = 2**12 - 1,
     ) -> np.ndarray:
         """Convert raw image (3d array) to radiance image
 
@@ -624,14 +614,16 @@ class RadianceConverter:
 
         # Set saturated pixels to zero (optional)
         if set_saturated_pixels_to_zero:
-            radiance_image[np.any(radiance_image>=saturation_value,axis=2)] = 0
+            radiance_image[np.any(radiance_image >= saturation_value, axis=2)] = 0
 
         # Convert to 16-bit integer format (more efficient for storage)
         return radiance_image.astype(np.uint16)
 
     def convert_raw_file_to_radiance(
-        self, raw_header_path: Union[Path, str], radiance_header_path: Union[Path, str],
-        interleave:str='bip'
+        self,
+        raw_header_path: Union[Path, str],
+        radiance_header_path: Union[Path, str],
+        interleave: str = "bip",
     ) -> None:
         """Read raw image file, convert to radiance, and save to file
 
@@ -658,14 +650,21 @@ class RadianceConverter:
         radiance_image = self.convert_raw_image_to_radiance(
             raw_image, raw_image_metadata
         )
-        save_envi(radiance_header_path, radiance_image, raw_image_metadata,
-                  interleave=interleave)
+        save_envi(
+            radiance_header_path,
+            radiance_image,
+            raw_image_metadata,
+            interleave=interleave,
+        )
 
 
 class WavelengthCalibrator:
 
     def __init__(self):
-        pass
+        self._fh_line_indices = None
+        self._fh_wavelengths = None
+        self._wl_poly_coeff = None
+        self.wl_cal = None
 
     @staticmethod
     def detect_absorption_lines(
@@ -684,10 +683,11 @@ class WavelengthCalibrator:
         return peak_indices, peak_properties
 
     @staticmethod
-    def fit_wavelength_polynomial(sample_indices:np.ndarray, wavelengths:np.ndarray, n_samples:int
-                                  ) -> tuple[np.ndarray,np.ndarray]:
-        """ Fit 2nd degree polynomial to set of (sample, wavelength) pairs 
-        
+    def fit_wavelength_polynomial(
+        sample_indices: np.ndarray, wavelengths: np.ndarray, n_samples: int
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Fit 2nd degree polynomial to set of (sample, wavelength) pairs
+
         Arguments:
         ----------
         sample_indices: np.ndarray
@@ -705,29 +705,31 @@ class WavelengthCalibrator:
         wl_poly_coeff:
             Coefficients for 2nd degree polynomial, ordered from degree zero upward
             (index corresponds to polynomial degree)
-        
+
         """
-        polynomial_fitted = Polynomial.fit(sample_indices, wavelengths, deg=2, domain=[])
+        polynomial_fitted = Polynomial.fit(
+            sample_indices, wavelengths, deg=2, domain=[]
+        )
         wl_cal = polynomial_fitted(np.arange(n_samples))
         wl_poly_coeff = polynomial_fitted.coef
         return wl_cal, wl_poly_coeff
-    
+
     @staticmethod
     def filter_fraunhofer_lines(line_indices, orig_wl, win_width_nm=20):
-        """ Calibrate wavelength values from known Fraunhofer absorption lines
+        """Calibrate wavelength values from known Fraunhofer absorption lines
 
         Arguments:
         ----------
         line_indices: np.ndarray
             Indices of samples in spectrum where a (potential) absorption
-            line has been detected. Indices must be within the range 
+            line has been detected. Indices must be within the range
             (0, len(orig_wl))
         orig_wl: np.ndarray
             Original wavelength vector. Values are assumed to be "close enough"
             to be used to create search windows for each Fraunhofer line,
             typically within a few nm. Shape (n_samples,)
         win_width_nm:
-            The width of the search windows in units of nanometers. 
+            The width of the search windows in units of nanometers.
 
         Returns:
         filtered_line_indices:
@@ -773,10 +775,9 @@ class WavelengthCalibrator:
 
         return filtered_line_indices, fraunhofer_wavelengths
 
+    def fit(self, spec: np.ndarray, wl_orig: np.ndarray) -> np.ndarray:
+        """Detect absorption lines in spectrum and fit polynomial wavelength function
 
-    def fit(self,spec:np.ndarray,wl_orig:np.ndarray) -> np.ndarray:
-        """ Detect absorption lines in spectrum and fit polynomial wavelength function 
-        
         Arguments:
         ----------
         spec: np.ndarray
@@ -784,77 +785,81 @@ class WavelengthCalibrator:
         wl_orig: np.ndarray
             Wavelengths corresponding to spectral samples, shape (n_samples)
             Wavelengths values are assumed to be close (within a few nm)
-            to their true values. 
+            to their true values.
         """
-        line_indices, _ = self.detect_absorption_lines(spec,wl_orig)
-        fh_line_indices, fh_wavelengths = self.filter_fraunhofer_lines(line_indices, wl_orig)
+        line_indices, _ = self.detect_absorption_lines(spec, wl_orig)
+        fh_line_indices, fh_wavelengths = self.filter_fraunhofer_lines(
+            line_indices, wl_orig
+        )
         if len(fh_line_indices) < 3:
-            raise ValueError("Too low data quality: Less than 3 absorption lines found.")
-        wl_cal, wl_poly_coeff = self.fit_wavelength_polynomial(fh_line_indices,fh_wavelengths, len(wl_orig))
+            raise ValueError(
+                "Too low data quality: Less than 3 absorption lines found."
+            )
+        wl_cal, wl_poly_coeff = self.fit_wavelength_polynomial(
+            fh_line_indices, fh_wavelengths, len(wl_orig)
+        )
 
         self._fh_line_indices = fh_line_indices
         self._fh_wavelengths = fh_wavelengths
         self.wl_cal = wl_cal
         self._wl_poly_coeff = wl_poly_coeff
 
-    def fit_batch(self,spectrum_header_paths:Iterable[Union[Path,str]]):
-        """ Calibrate wavelength based on spectrum with highest SNR (among many)
-        
+    def fit_batch(self, spectrum_header_paths: Iterable[Union[Path, str]]):
+        """Calibrate wavelength based on spectrum with highest SNR (among many)
+
         Arguments:
         ----------
         spectrum_header_paths: Iterable[Path | str]
-            Paths to multiple spectra. The spectrum with the highest maximum 
+            Paths to multiple spectra. The spectrum with the highest maximum
             value will be used for wavelength calibration.
-            Spectra are assumed to be ENVI files. 
+            Spectra are assumed to be ENVI files.
 
         """
         spectra = []
         for spectrum_path in spectrum_header_paths:
             spectrum_path = Path(spectrum_path)
             try:
-                spec,wl,_ = read_envi(spectrum_path)
+                spec, wl, _ = read_envi(spectrum_path)
             except OSError as error:
-                print(f'Error opening spectrum {spectrum_path}')
-                print('Skipping spectrum.')
+                print(f"Error opening spectrum {spectrum_path}")
+                print("Skipping spectrum.")
             spectra.append(spec)
 
         spectra = np.array(spectra)
-        cal_spec = spectra[np.argmax(np.max(spectra,axis=1))]
-        self.fit(cal_spec,wl) 
+        cal_spec = spectra[np.argmax(np.max(spectra, axis=1))]
+        self.fit(cal_spec, wl)
 
-    def update_header_wavelengths(self,header_paths:Iterable[Union[Path,str]]):
-        """ Update header files with calibrated wavelengths
-        
+    def update_header_wavelengths(self, header_paths: Iterable[Union[Path, str]]):
+        """Update header files with calibrated wavelengths
+
         Arguments:
         ----------
         header_paths: Iterable[Path | str]
-            Iterable with paths multiple spectra. 
+            Iterable with paths multiple spectra.
 
         """
-        try:
-            wl_str = [f'{wl:.3f}' for wl in self.wl_cal] # Convert each number to string
-            wl_str = '{' + ', '.join(wl_str) + '}'       # Join into single string
-        except AttributeError as error:
-            print('Attribute wl_cal not present - fit (calibrate) first.')
+        if self.wl_cal is None:
+            raise AttributeError("Attribute wl_cal is not set - fit (calibrate) first.")
+
+        wl_str = [f"{wl:.3f}" for wl in self.wl_cal]  # Convert each number to string
+        wl_str = "{" + ", ".join(wl_str) + "}"  # Join into single string
 
         for header_path in header_paths:
             header_path = Path(header_path)
             try:
                 header_dict = spectral.io.envi.read_envi_header(header_path)
             except OSError as error:
-                print(f'Error opening header {header_path}')
+                print(f"Error opening header {header_path}")
                 print(error)
-                print('Skipping...')
+                print("Skipping...")
 
-            header_dict['wavelength'] = wl_str
+            header_dict["wavelength"] = wl_str
             try:
                 spectral.io.envi.write_envi_header(header_path, header_dict)
             except OSError as error:
-                print(f'Error updating header {header_path}')
+                print(f"Error updating header {header_path}")
                 print(error)
-                print('Skipping...')
-
-
+                print("Skipping...")
 
 
 class IrradianceConverter:
@@ -931,9 +936,11 @@ class IrradianceConverter:
         self._irrad_sens_shutter = float(irrad_sens_metadata["shutter"])
 
     def convert_raw_spectrum_to_irradiance(
-        self, raw_spec: np.ndarray, raw_metadata: np.ndarray,
-        set_irradiance_outside_wl_limits_to_zero:bool = True,
-        keep_original_dimensions:bool=True
+        self,
+        raw_spec: np.ndarray,
+        raw_metadata: np.ndarray,
+        set_irradiance_outside_wl_limits_to_zero: bool = True,
+        keep_original_dimensions: bool = True,
     ) -> tuple[np.ndarray, np.ndarray]:
         """
 
@@ -952,12 +959,12 @@ class IrradianceConverter:
         the sensitivity spectrum values are decreased to account for this.
         Dark current is assumed to be independent of shutter value.
         """
-        
+
         original_input_dimensions = raw_spec.shape
         raw_spec = np.squeeze(raw_spec)
 
         if raw_spec.ndim > 1:
-            raise ValueError('Raw irradiance spectrum must be a 1D array.')
+            raise ValueError("Raw irradiance spectrum must be a 1D array.")
 
         # Scale sensitivity spectrum according to difference in shutter values
         raw_shutter = float(raw_metadata["shutter"])
@@ -973,17 +980,17 @@ class IrradianceConverter:
             cal_irrad_spec[~self._valid_wl_ind] = 0
 
         if keep_original_dimensions:
-            cal_irrad_spec = np.reshape(cal_irrad_spec,original_input_dimensions)
+            cal_irrad_spec = np.reshape(cal_irrad_spec, original_input_dimensions)
 
         return cal_irrad_spec
-    
-    def convert_raw_file_to_irradiance(self,raw_spec_path:Union[Path,str],
-                                       irrad_spec_path:Union[Path,str]):
-        """ Read raw spectrum, convert to irradiance, and save """
-        raw_spec,_,raw_metadata = read_envi(raw_spec_path)
-        irrad_spec = self.convert_raw_spectrum_to_irradiance(raw_spec,raw_metadata)
-        save_envi(irrad_spec_path,irrad_spec,raw_metadata)
 
+    def convert_raw_file_to_irradiance(
+        self, raw_spec_path: Union[Path, str], irrad_spec_path: Union[Path, str]
+    ):
+        """Read raw spectrum, convert to irradiance, and save"""
+        raw_spec, _, raw_metadata = read_envi(raw_spec_path)
+        irrad_spec = self.convert_raw_spectrum_to_irradiance(raw_spec, raw_metadata)
+        save_envi(irrad_spec_path, irrad_spec, raw_metadata)
 
 
 class ReflectanceConverter:
@@ -1012,14 +1019,16 @@ class ReflectanceConverter:
         """Interpolate downwelling spectrum to image wavelengths"""
         return np.interp(x=image_wl, xp=irrad_wl, fp=irrad_spec)
 
-    def rad_im_to_refl_im(self, 
-                          rad_image: np.ndarray, 
-                          rad_wl: np.ndarray,
-                          irrad_spec: np.ndarray,
-                          irrad_wl: np.ndarray,
-                          convolve_irradiance_with_gaussian: bool = True,
-                          gauss_fwhm: float = 2.7,
-                          **kwargs):
+    def rad_im_to_refl_im(
+        self,
+        rad_image: np.ndarray,
+        rad_wl: np.ndarray,
+        irrad_spec: np.ndarray,
+        irrad_wl: np.ndarray,
+        convolve_irradiance_with_gaussian: bool = True,
+        gauss_fwhm: float = 2.7,
+        **kwargs,
+    ):
         """Convert radiance image to reflectance using downwelling spectrum"""
 
         # Check that spectrum is 1D, then expand to 3D for broadcasting
@@ -1027,32 +1036,30 @@ class ReflectanceConverter:
         assert irrad_spec.ndim == 1
 
         # Limit output wavelength range
-        valid_image_wl_ind = (rad_wl>=self.wl_min) & (rad_wl<=self.wl_max)
+        valid_image_wl_ind = (rad_wl >= self.wl_min) & (rad_wl <= self.wl_max)
         rad_wl = rad_wl[valid_image_wl_ind]
-        rad_image = rad_image[:,:,valid_image_wl_ind]
+        rad_image = rad_image[:, :, valid_image_wl_ind]
 
         # Make irradiance spectrum compatible with image
         if convolve_irradiance_with_gaussian:
-            irrad_spec = self.conv_spec_with_gaussian(irrad_spec,irrad_wl, gauss_fwhm)
-        irrad_spec = self.interpolate_irrad_to_image_wl(irrad_spec,irrad_wl,rad_wl)
+            irrad_spec = self.conv_spec_with_gaussian(irrad_spec, irrad_wl, gauss_fwhm)
+        irrad_spec = self.interpolate_irrad_to_image_wl(irrad_spec, irrad_wl, rad_wl)
         irrad_spec = np.expand_dims(irrad_spec, axis=(0, 1))
 
         # Convert to reflectance, assuming Lambertian (perfectly diffuse) surface
         refl_image = math.pi * (rad_image / irrad_spec)
         return refl_image
 
-
     def rad_file_to_refl_file(
         self,
         radiance_image_header: Union[Path, str],
         irradiance_header: Union[Path, str],
-        **kwargs
+        **kwargs,
     ):
         # TODO: Pass gaussian kernel info to radiance_to_reflectance_image
-        refl_image = rad_im_to_refl_im(rad_image,rad_wl,irrad_spec,irrad_wl,**kwargs)
-        
-
-
+        refl_image = rad_im_to_refl_im(
+            rad_image, rad_wl, irrad_spec, irrad_wl, **kwargs
+        )
 
 
 class RadianceBatchConverter:
