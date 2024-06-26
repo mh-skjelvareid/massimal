@@ -664,7 +664,22 @@ class WavelengthCalibrator:
         self._fh_line_indices = None
         self._fh_wavelengths = None
         self._wl_poly_coeff = None
+        self.reference_spectrum_path = None
         self.wl_cal = None
+        self.max_wl_diff = None
+
+
+        self.fraunhofer_wls = {
+            "L": 382.04,
+            "G": 430.78,
+            "F": 486.13,
+            "b1": 518.36,
+            "D": 589.30,
+            "C": 656.28,
+            "B": 686.72,
+            "A": 760.30,  # Not well defined (O2 band), approximate
+            "Z": 822.70,
+        }
 
     @staticmethod
     def detect_absorption_lines(
@@ -714,8 +729,8 @@ class WavelengthCalibrator:
         wl_poly_coeff = polynomial_fitted.coef
         return wl_cal, wl_poly_coeff
 
-    @staticmethod
-    def filter_fraunhofer_lines(line_indices, orig_wl, win_width_nm=20):
+
+    def _filter_fraunhofer_lines(self,line_indices, orig_wl, win_width_nm=20):
         """Calibrate wavelength values from known Fraunhofer absorption lines
 
         Arguments:
@@ -739,21 +754,9 @@ class WavelengthCalibrator:
 
         """
 
-        fraunhofer_wls = {
-            "L": 382.04,
-            "G": 430.78,
-            "F": 486.13,
-            "b1": 518.36,
-            "D": 589.30,
-            "C": 656.28,
-            "B": 686.72,
-            "A": 760.30,  # Not well defined (O2 band), approximate
-            "Z": 822.70,
-        }
-
         filtered_line_indices = []
         fraunhofer_wavelengths = []
-        for fh_line_wl in fraunhofer_wls.values():
+        for fh_line_wl in self.fraunhofer_wls.values():
             # Find index of closest sample to Fraunhofer wavelength
             fh_wl_ind = closest_wl_index(orig_wl, fh_line_wl)
 
@@ -787,8 +790,12 @@ class WavelengthCalibrator:
             Wavelengths values are assumed to be close (within a few nm)
             to their true values.
         """
+        spec = np.squeeze(spec)
+        if spec.ndim > 1:
+            raise ValueError('Spectrum must be a 1D array')
+        
         line_indices, _ = self.detect_absorption_lines(spec, wl_orig)
-        fh_line_indices, fh_wavelengths = self.filter_fraunhofer_lines(
+        fh_line_indices, fh_wavelengths = self._filter_fraunhofer_lines(
             line_indices, wl_orig
         )
         if len(fh_line_indices) < 3:
@@ -801,8 +808,9 @@ class WavelengthCalibrator:
 
         self._fh_line_indices = fh_line_indices
         self._fh_wavelengths = fh_wavelengths
-        self.wl_cal = wl_cal
         self._wl_poly_coeff = wl_poly_coeff
+        self.wl_cal = wl_cal
+        self.max_wl_diff = np.max(abs(wl_cal-wl_orig)) 
 
     def fit_batch(self, spectrum_header_paths: Iterable[Union[Path, str]]):
         """Calibrate wavelength based on spectrum with highest SNR (among many)
@@ -815,6 +823,7 @@ class WavelengthCalibrator:
             Spectra are assumed to be ENVI files.
 
         """
+        spectrum_header_paths = list(spectrum_header_paths)
         spectra = []
         for spectrum_path in spectrum_header_paths:
             spectrum_path = Path(spectrum_path)
@@ -823,11 +832,15 @@ class WavelengthCalibrator:
             except OSError as error:
                 print(f"Error opening spectrum {spectrum_path}")
                 print("Skipping spectrum.")
-            spectra.append(spec)
+            spectra.append(np.squeeze(spec))
 
         spectra = np.array(spectra)
-        cal_spec = spectra[np.argmax(np.max(spectra, axis=1))]
+        best_spec_ind = np.argmax(np.max(spectra, axis=1))
+        cal_spec = spectra[best_spec_ind]
+        self.reference_spectrum_path = str(spectrum_header_paths[best_spec_ind])
+
         self.fit(cal_spec, wl)
+
 
     def update_header_wavelengths(self, header_paths: Iterable[Union[Path, str]]):
         """Update header files with calibrated wavelengths
@@ -1056,20 +1069,5 @@ class ReflectanceConverter:
         irradiance_header: Union[Path, str],
         **kwargs,
     ):
-        # TODO: Pass gaussian kernel info to radiance_to_reflectance_image
-        refl_image = rad_im_to_refl_im(
-            rad_image, rad_wl, irrad_spec, irrad_wl, **kwargs
-        )
 
 
-class RadianceBatchConverter:
-
-    def __init__(self, raw_data_dir):
-        pass
-
-        # icp_files = [self.raw_data_dir.glob('*.icp')]
-        # if len(icp_files) == 0:
-        #     raise FileNotFoundError(f'No calibration file (*.icp) found in {self.raw_data_dir}')
-        # elif len(icp_files) > 1:
-        #     raise ValueError(f'More than one calibration file (*.icp) found in {self.raw_data_dir}')
-        # self.radiance_calibration_file = icp_files[0]
