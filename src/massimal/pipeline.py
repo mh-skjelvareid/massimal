@@ -5,9 +5,8 @@ import numpy as np
 from numpy.polynomial import Polynomial
 from typing import Union, Iterable
 from pathlib import Path
-from scipy.signal import savgol_filter, find_peaks, medfilt
+from scipy.signal import savgol_filter, find_peaks
 from scipy.ndimage import gaussian_filter1d
-import math
 
 
 def read_envi(
@@ -117,6 +116,19 @@ def save_envi(
         header_path, image, metadata=metadata, force=True, ext=None, **kwargs
     )
 
+def wavelength_array_to_header_string(wavelengths:np.ndarray):
+    wl_str = [f"{wl:.3f}" for wl in wavelengths]  # Convert each number to string
+    wl_str = "{" + ", ".join(wl_str) + "}"  # Join into single string
+    return wl_str
+
+def update_header_wavelengths(wavelengths:np.ndarray, header_path:Union[Path,str]):
+    """ Update ENVI header wavelengths """
+    header_path = Path(header_path)
+    header_dict = spectral.io.envi.read_envi_header(header_path)
+    wl_str = wavelength_array_to_header_string(wavelengths)
+    header_dict["wavelength"] = wl_str
+    spectral.io.envi.write_envi_header(header_path, header_dict)
+
 
 def bin_image(
     image: np.ndarray,
@@ -179,7 +191,11 @@ def bin_image(
     return image
 
 
-def closest_wl_index(wl_array, target_wl):
+def savitzky_golay_filter(image,window_length:int=13,polyorder:int=3,axis:int=2) -> np.ndarray:
+    """ Filter hyperspectral image using Savitzky-Golay filter with default arguments """
+    return savgol_filter(image,window_length=window_length,polyorder=polyorder,axis=axis)
+
+def closest_wl_index(wl_array:np.ndarray, target_wl:Union[float,int]):
     """Get index in sampled wavelength array closest to target wavelength"""
     return np.argmin(abs(wl_array - target_wl))
 
@@ -842,7 +858,7 @@ class WavelengthCalibrator:
         self.fit(cal_spec, wl)
 
 
-    def update_header_wavelengths(self, header_paths: Iterable[Union[Path, str]]):
+    def batch_update_header_wavelengths(self, header_paths: Iterable[Union[Path, str]]):
         """Update header files with calibrated wavelengths
 
         Arguments:
@@ -854,21 +870,9 @@ class WavelengthCalibrator:
         if self.wl_cal is None:
             raise AttributeError("Attribute wl_cal is not set - fit (calibrate) first.")
 
-        wl_str = [f"{wl:.3f}" for wl in self.wl_cal]  # Convert each number to string
-        wl_str = "{" + ", ".join(wl_str) + "}"  # Join into single string
-
         for header_path in header_paths:
-            header_path = Path(header_path)
             try:
-                header_dict = spectral.io.envi.read_envi_header(header_path)
-            except OSError as error:
-                print(f"Error opening header {header_path}")
-                print(error)
-                print("Skipping...")
-
-            header_dict["wavelength"] = wl_str
-            try:
-                spectral.io.envi.write_envi_header(header_path, header_dict)
+                update_header_wavelengths(self.wl_cal,header_path)
             except OSError as error:
                 print(f"Error updating header {header_path}")
                 print(error)
@@ -985,8 +989,9 @@ class IrradianceConverter:
             self._irrad_sens_shutter / raw_shutter
         ) * self._irrad_sens_spec
 
-        # Subtract dark current, convert to irradiance (TODO: Double-check physical units)
-        cal_irrad_spec = (raw_spec - self._cal_dark_spec) * scaled_sens_spec
+        # Subtract dark current, convert to irradiance 
+        # TODO: Double-check physical units and multiplication with pi
+        cal_irrad_spec = (raw_spec - self._cal_dark_spec) * (scaled_sens_spec * np.pi)
 
         # Set spectrum outside wavelength limits to zero
         if set_irradiance_outside_wl_limits_to_zero:
@@ -1032,7 +1037,7 @@ class ReflectanceConverter:
         """Interpolate downwelling spectrum to image wavelengths"""
         return np.interp(x=image_wl, xp=irrad_wl, fp=irrad_spec)
 
-    def rad_im_to_refl_im(
+    def convert_radiance_image_to_reflectance(
         self,
         rad_image: np.ndarray,
         rad_wl: np.ndarray,
@@ -1040,7 +1045,7 @@ class ReflectanceConverter:
         irrad_wl: np.ndarray,
         convolve_irradiance_with_gaussian: bool = True,
         gauss_fwhm: float = 2.7,
-        **kwargs,
+        smooth_with_savitsky_golay = False,
     ):
         """Convert radiance image to reflectance using downwelling spectrum"""
 
@@ -1060,14 +1065,27 @@ class ReflectanceConverter:
         irrad_spec = np.expand_dims(irrad_spec, axis=(0, 1))
 
         # Convert to reflectance, assuming Lambertian (perfectly diffuse) surface
-        refl_image = math.pi * (rad_image / irrad_spec)
-        return refl_image
+        refl_image = np.pi * (rad_image.astype(np.float32) / irrad_spec.astype(np.float32))
+        refl_wl = rad_wl
 
-    def rad_file_to_refl_file(
+        # Spectral smoothing (optional)
+        if smooth_with_savitsky_golay:
+            refl_image = savitzky_golay_filter(refl_image)
+
+        return refl_image, refl_wl, irrad_spec
+
+    def convert_radiance_file_to_reflectance(
         self,
         radiance_image_header: Union[Path, str],
         irradiance_header: Union[Path, str],
+        reflectance_image_header: Union[Path, str],
         **kwargs,
     ):
-
+        rad_image, rad_wl, rad_meta = read_envi(radiance_image_header)
+        irrad_spec, irrad_wl, _ = read_envi(irradiance_header)
+        refl_im, refl_wl, _ = self.convert_radiance_image_to_reflectance(rad_image,rad_wl,irrad_spec,irrad_wl)
+        wl_str = wavelength_array_to_header_string(refl_wl)
+        refl_meta = rad_meta
+        refl_meta['wavelength'] = wl_str
+        save_envi(reflectance_image_header,refl_im,refl_meta)
 
