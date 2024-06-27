@@ -7,6 +7,9 @@ from typing import Union, Iterable
 from pathlib import Path
 from scipy.signal import savgol_filter, find_peaks
 from scipy.ndimage import gaussian_filter1d
+import warnings
+import logging
+from datetime import datetime
 
 
 def read_envi(
@@ -50,23 +53,22 @@ def read_envi(
     try:
         im_handle = spectral.io.envi.open(header_path, image_path)
     except spectral.io.envi.MissingEnviHeaderParameter as e:
-        print(f"Header file has missing parameter: {header_path}")
-        print(e)
+        logging.debug(f"Header file has missing parameter: {header_path}")
         byte_order_missing_str = (
             'Mandatory parameter "byte order" missing from header file.'
         )
         if str(e) == byte_order_missing_str and write_byte_order_if_missing:
-            print('Writing "byte order = 0" to header file and retrying')
+            logging.debug('Writing "byte order = 0" to header file and retrying')
             try:
                 with open(header_path, "a") as file:
                     file.write("byte order = 0\n")
             except OSError:
-                print(f"Error writing to header file {header_path}")
+                logging.error(f"Error writing to header file {header_path}",exc_info=True)
+            
             try:
                 im_handle = spectral.io.envi.open(header_path, image_path)
             except Exception as e:
-                print(f"Unsucessful - error reading modified header file {header_path}")
-                print(e)
+                logging.error(f"Unsucessful when reading modified header file {header_path}",exc_info=True)
                 return
             print(f"Successfully read modified header file {header_path}")
 
@@ -273,23 +275,19 @@ class RadianceCalibrationDataset:
     def _unzip_calibration_file(self, unzip_into_nonempty_dir: bool = False) -> None:
         """Unzip *.icp file (which is a zip file)"""
         if not unzip_into_nonempty_dir and any(list(self.calibration_dir.iterdir())):
-            print(f"INFO: Non-empty calibration directory {self.calibration_dir}")
-            print(
-                "INFO: Skipping unzipping of calibration file, assuming unzipping already done."
-            )
+            logging.info(f"Non-empty calibration directory {self.calibration_dir}")
+            logging.info('Assuming calibration file already unzipped.')
             return
         try:
             with zipfile.ZipFile(self.calibration_file, mode="r") as zip_file:
                 for filename in zip_file.namelist():
                     zip_file.extract(filename, self.calibration_dir)
         except zipfile.BadZipFile:
-            print(f"File {self.calibration_file} is not a valid ZIP file.")
+            logging.error(f"File {self.calibration_file} is not a valid ZIP file.",exc_info=True)
         except Exception as e:
-            print(
-                "An unexpected error occured when extracting calibration file "
-                f"{self.calibration_file}"
-            )
-            print(e)
+            logging.error(f"Unexpected error when extracting calibration file {self.calibration_file}",
+                          exc_info=True)
+
 
     def _get_dark_frames_gain_shutter(self) -> None:
         """Extract and save gain and shutter values for each dark frame"""
@@ -857,26 +855,38 @@ class WavelengthCalibrator:
 
         self.fit(cal_spec, wl)
 
-
-    def batch_update_header_wavelengths(self, header_paths: Iterable[Union[Path, str]]):
-        """Update header files with calibrated wavelengths
+    def update_header_wavelengths(self, header_path: Union[Path, str]):
+        """Update header file with calibrated wavelengths
 
         Arguments:
         ----------
-        header_paths: Iterable[Path | str]
+        header_paths: Path | str
             Iterable with paths multiple spectra.
 
         """
         if self.wl_cal is None:
             raise AttributeError("Attribute wl_cal is not set - fit (calibrate) first.")
+        update_header_wavelengths(self.wl_cal,header_path)
 
-        for header_path in header_paths:
-            try:
-                update_header_wavelengths(self.wl_cal,header_path)
-            except OSError as error:
-                print(f"Error updating header {header_path}")
-                print(error)
-                print("Skipping...")
+    # def batch_update_header_wavelengths(self, header_paths: Iterable[Union[Path, str]]):
+    #     """Update header files with calibrated wavelengths
+
+    #     Arguments:
+    #     ----------
+    #     header_paths: Iterable[Path | str]
+    #         Iterable with paths multiple spectra.
+
+    #     """
+    #     if self.wl_cal is None:
+    #         raise AttributeError("Attribute wl_cal is not set - fit (calibrate) first.")
+
+    #     for header_path in header_paths:
+    #         try:
+    #             update_header_wavelengths(self.wl_cal,header_path)
+    #         except OSError as error:
+    #             print(f"Error updating header {header_path}")
+    #             print(error)
+    #             print("Skipping...")
 
 
 class IrradianceConverter:
@@ -909,11 +919,11 @@ class IrradianceConverter:
     def _unzip_irrad_cal_file(self, unzip_into_nonempty_dir: bool = False) -> None:
         """Unzip *.dcp file (which is a zip file)"""
         if not unzip_into_nonempty_dir and any(list(self.irrad_cal_dir.iterdir())):
-            print(
-                f"INFO: Non-empty downwelling calibration directory {self.irrad_cal_dir}"
+            logging.info(
+                f"Non-empty downwelling calibration directory {self.irrad_cal_dir}"
             )
-            print(
-                f"INFO: Skipping unzipping of downwelling calibration file, "
+            logging.info(
+                f"Skipping unzipping of downwelling calibration file, "
                 "assuming unzipping already done."
             )
             return
@@ -1089,3 +1099,177 @@ class ReflectanceConverter:
         refl_meta['wavelength'] = wl_str
         save_envi(reflectance_image_header,refl_im,refl_meta)
 
+
+class PipelineProcessor:
+
+    def __init__(self,dataset_dir:Union[Path,str]):
+        self.dataset_dir = dataset_dir
+        self.dataset_base_name = dataset_dir.name
+        self.raw_dir = dataset_dir / '0_raw'
+        self.radiance_dir = dataset_dir / '1_radiance'
+        self.reflectance_dir = dataset_dir / '2_reflectance'
+        self.calibration_dir = dataset_dir / 'calibration'
+        self.logs_dir = dataset_dir / 'logs'
+
+        if not self.raw_dir.exists():
+            raise FileNotFoundError(f'Folder "0_raw" not found in {dataset_dir}')
+        if not self.calibration_dir.exists():
+            raise FileNotFoundError(f'Folder "calibration" not found in {dataset_dir}')
+        
+        # Search for ENVI image header files, sort and validate
+        self.raw_image_paths = list(self.raw_dir.rglob('*.bil.hdr'))
+        self.raw_image_paths = sorted(self.raw_image_paths,key=self.get_image_number)
+        self._validate_raw_files()
+
+        # Initialize lists of processed file paths
+        self.radiance_image_paths = [None for _ in range(len(self.raw_image_paths))]
+        self.reflectance_image_paths = [None for _ in range(len(self.raw_image_paths))]
+        
+        # Create "base" file names numbered from 0
+        self.base_file_names = self._create_base_file_names()
+        
+        # Search for irradiance spectrum files
+        self.raw_spec_paths = self._get_irradiance_spectrum_paths()
+
+        # Get calibration file paths
+        self.radiance_calibration_file = self._get_radiance_calibration_path()
+        self.irradiance_calibration_file = self._get_irradiance_calibration_path()
+
+        # Configure logging
+        self._configure_logging()
+
+    def _configure_logging(self):
+        self.logs_dir.mkdir(exist_ok=True)
+        timestamp = datetime.now().strftime("%H%M%S")
+        log_file_name = f'{timestamp}_{self.dataset_base_name}.log'
+        log_path = self.logs_dir / log_file_name
+        logging.basicConfig(
+            format='%(asctime)s %(levelname)s: %(message)s',
+            datefmt='%H:%M:%S',
+            level = logging.INFO,
+            handlers=[
+                logging.FileHandler(log_path,mode='w'),
+                logging.StreamHandler()
+            ]
+        )
+        logging.info('Logging started.')
+
+
+    def _validate_raw_files(self):
+        for raw_image_path in list(self.raw_image_paths): # Use list() to copy
+            file_base_name = raw_image_path.name.split('.')[0]
+            binary_im_path = raw_image_path.parent / (file_base_name + '.bil')
+            times_path =  raw_image_path.parent / (file_base_name + '.bil.times')
+            lcf_path = raw_image_path.parent / (file_base_name + '.lcf')
+            if (not(binary_im_path.exists()) or not(times_path.exists()) or not(lcf_path.exists())):
+                warnings.warn(f'Set of raw files for image {raw_image_path} is not complete')
+                self.raw_image_paths.remove(raw_image_path)
+
+    @staticmethod
+    def get_image_number(raw_image_path):
+        image_file_stem = raw_image_path.name.split('.')[0]
+        image_number = image_file_stem.split('_')[-1]
+        return int(image_number)
+            
+    def _create_base_file_names(self):
+        base_file_names = [f'{self.dataset_base_name}_{i:03d}' 
+                           for i in range(len(self.raw_image_paths))]
+        return base_file_names
+    
+
+    def _get_irradiance_spectrum_paths(self):
+        spec_paths = []
+        for raw_image_path in self.raw_image_paths:
+            spec_base_name = raw_image_path.name.split('_')[0]
+            image_number = self.get_image_number(raw_image_path)
+            spec_binary = raw_image_path.parent / f'{spec_base_name}_downwelling_{image_number}_pre.spec'
+            spec_header = raw_image_path.parent / (spec_binary.name + '.hdr')
+            if (spec_binary.exists() and spec_header.exists()):
+                spec_paths.append(spec_header)
+            else:
+                spec_paths.append(None)
+        return spec_paths
+    
+    def _get_radiance_calibration_path(self):
+        icp_files = list(self.calibration_dir.glob('*.icp'))
+        if len(icp_files) == 1:
+            return icp_files[0]
+        elif len(icp_files) == 0:
+            raise FileNotFoundError(f'No radiance calibration file (*.icp) found in {self.calibration_dir}')
+        else:
+            raise ValueError(f'More than one radiance calibration file (*.icp) found in {self.calibration_dir}')
+
+    def _get_irradiance_calibration_path(self):
+        dcp_files = list(self.calibration_dir.glob('*.dcp'))
+        if len(dcp_files) == 1:
+            return dcp_files[0]
+        elif len(dcp_files) == 0:
+            raise FileNotFoundError(f'No irradiance calibration file (*.dcp) found in {self.calibration_dir}')
+        else:
+            raise ValueError(f'More than one irradiance calibration file (*.dcp) found in {self.calibration_dir}')
+        
+
+    def convert_raw_images_to_radiance(self):
+        logging.info('---- RADIANCE CONVERSION ----')
+        self.radiance_dir.mkdir(exist_ok=True)
+        radiance_converter = RadianceConverter(self.radiance_calibration_file)
+        for raw_image_path, base_file_name in zip(self.raw_image_paths,self.base_file_names):
+            logging.info(f'Converting {base_file_name} to radiance')
+            radiance_file_name = f'{base_file_name}_radiance.bip.hdr'
+            radiance_image_path = self.radiance_dir / radiance_file_name
+            try:
+                radiance_converter.convert_raw_file_to_radiance(raw_image_path,radiance_image_path)
+            except Exception as e:
+                logging.warning(f'Error occured while processing {raw_image_path}',exc_info=True)
+                logging.warning('Skipping file')
+
+
+    def convert_raw_spectra_to_irradiance(self):
+        logging.info('---- IRRADIANCE CONVERSION ----')
+        self.radiance_dir.mkdir(exist_ok=True)
+        irradiance_converter = IrradianceConverter(self.irradiance_calibration_file)
+        for raw_spec_path, base_file_name in zip(self.raw_spec_paths,self.base_file_names):
+            if raw_spec_path is not None:
+                logging.info(f'Converting {base_file_name} to downwelling irradiance')
+                irradiance_file_name = f'{base_file_name}_irradiance.spec.hdr'
+                irradiance_spec_path = self.radiance_dir / irradiance_file_name
+                try:
+                    irradiance_converter.convert_raw_file_to_irradiance(raw_spec_path,irradiance_spec_path)
+                except Exception as e:
+                    logging.error(f'Error occured while processing {raw_spec_path}',exc_info=True)
+                    logging.error('Skipping file')
+
+
+
+    def calibrate_irradiance_wavelengths(self):
+        logging.info('---- IRRADIANCE WAVELENGTH CALIBRATION ----')
+        if not(self.radiance_dir.exists()):
+            raise FileNotFoundError('Radiance folder with irradiance spectra does not exist')
+        wavelength_calibrator = WavelengthCalibrator()
+        irradiance_spec_paths = list(self.radiance_dir.glob('*.spec.hdr'))
+        if irradiance_spec_paths:
+            wavelength_calibrator.fit_batch(irradiance_spec_paths)
+            for irradiance_spec_path in irradiance_spec_paths:
+                logging.info(f'Calibrating wavelengths for {irradiance_spec_path.name}')
+                try:
+                    wavelength_calibrator.update_header_wavelengths(irradiance_spec_path)
+                except Exception as e:
+                    logging.error(f'Error occured while processing {irradiance_spec_path}',exc_info=True)
+                    logging.error('Skipping file')
+
+
+    # def convert_radiance_images_to_reflectance(self):
+    #     logging.info('---- REFLECTANCE CONVERSION ----')
+    #     self.reflectance_dir.mkdir(exist_ok=True)
+    #     reflectance_converter = ReflectanceConverter()
+    #     radiance_image_paths = self.radiance_dir.glob('*.bip.hdr')
+    #     irradiance_spec_paths = self.radiance_dir.glob('*.spec.hdr')
+    #     for base_file_name in self.base_file_names:
+            
+
+
+    def run(self):
+        self.convert_raw_images_to_radiance()
+        self.convert_raw_images_to_radiance()
+        self.calibrate_irradiance_wavelengths()
+        self.convert_radiance_images_to_reflectance()
