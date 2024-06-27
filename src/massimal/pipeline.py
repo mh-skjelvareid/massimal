@@ -1044,7 +1044,7 @@ class ReflectanceConverter:
         irrad_spec: np.ndarray,
         irrad_wl: np.ndarray,
         convolve_irradiance_with_gaussian: bool = True,
-        gauss_fwhm: float = 2.7,
+        gauss_fwhm: float = 3.5,  # TODO: Find "optimal" default value for Pika-L
         smooth_with_savitsky_golay = False,
     ):
         """Convert radiance image to reflectance using downwelling spectrum"""
