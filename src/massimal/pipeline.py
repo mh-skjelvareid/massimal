@@ -131,7 +131,6 @@ def update_header_wavelengths(wavelengths:np.ndarray, header_path:Union[Path,str
     header_dict["wavelength"] = wl_str
     spectral.io.envi.write_envi_header(header_path, header_dict)
 
-
 def bin_image(
     image: np.ndarray,
     line_bin_size: int = 1,
@@ -628,7 +627,7 @@ class RadianceConverter:
 
         # Set saturated pixels to zero (optional)
         if set_saturated_pixels_to_zero:
-            radiance_image[np.any(radiance_image >= saturation_value, axis=2)] = 0
+            radiance_image[np.any(raw_image >= saturation_value, axis=2)] = 0
 
         # Convert to 16-bit integer format (more efficient for storage)
         return radiance_image.astype(np.uint16)
@@ -868,25 +867,6 @@ class WavelengthCalibrator:
             raise AttributeError("Attribute wl_cal is not set - fit (calibrate) first.")
         update_header_wavelengths(self.wl_cal,header_path)
 
-    # def batch_update_header_wavelengths(self, header_paths: Iterable[Union[Path, str]]):
-    #     """Update header files with calibrated wavelengths
-
-    #     Arguments:
-    #     ----------
-    #     header_paths: Iterable[Path | str]
-    #         Iterable with paths multiple spectra.
-
-    #     """
-    #     if self.wl_cal is None:
-    #         raise AttributeError("Attribute wl_cal is not set - fit (calibrate) first.")
-
-    #     for header_path in header_paths:
-    #         try:
-    #             update_header_wavelengths(self.wl_cal,header_path)
-    #         except OSError as error:
-    #             print(f"Error updating header {header_path}")
-    #             print(error)
-    #             print("Skipping...")
 
 
 class IrradianceConverter:
@@ -1123,13 +1103,14 @@ class PipelineProcessor:
 
         # Initialize lists of processed file paths
         self.radiance_image_paths = [None for _ in range(len(self.raw_image_paths))]
+        self.irradiance_spec_paths = [None for _ in range(len(self.raw_image_paths))]
         self.reflectance_image_paths = [None for _ in range(len(self.raw_image_paths))]
         
         # Create "base" file names numbered from 0
         self.base_file_names = self._create_base_file_names()
         
         # Search for irradiance spectrum files
-        self.raw_spec_paths = self._get_irradiance_spectrum_paths()
+        self.raw_spec_paths = self._get_raw_spectrum_paths()
 
         # Get calibration file paths
         self.radiance_calibration_file = self._get_radiance_calibration_path()
@@ -1139,10 +1120,15 @@ class PipelineProcessor:
         self._configure_logging()
 
     def _configure_logging(self):
+        """ Configure logging for pipeline """
+
+        # Create log file path
         self.logs_dir.mkdir(exist_ok=True)
-        timestamp = datetime.now().strftime("%H%M%S")
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         log_file_name = f'{timestamp}_{self.dataset_base_name}.log'
         log_path = self.logs_dir / log_file_name
+
+        # Basic configuration ("root" logger)
         logging.basicConfig(
             format='%(asctime)s %(levelname)s: %(message)s',
             datefmt='%H:%M:%S',
@@ -1153,6 +1139,32 @@ class PipelineProcessor:
             ]
         )
         logging.info('Logging started.')
+
+        """ Possible logger object setup: 
+        # Create logger object
+        self.logger = logging.getLogger(__name__) 
+        self.logger.setLevel(logging.INFO)
+        
+        # Create output handlers
+        stream_handler = logging.StreamHandler()
+        stream_handler.setLevel(logging.INFO)
+        file_handler = logging.FileHandler(log_path)
+        file_handler.setLevel(logging.INFO)
+        
+        # Define output format
+        formatter = logging.Formatter(
+            fmt = '%(asctime)s %(levelname)s: %(message)s',
+            datefmt = '%H:%M:%S'
+        )
+        stream_handler.setFormatter(formatter)
+        file_handler.setFormatter(formatter)
+
+        # Create logger and assign handlers
+        self.logger.addHandler(stream_handler)
+        self.logger.addHandler(file_handler)
+        self.logger.info('Logging started.')
+        """
+
 
 
     def _validate_raw_files(self):
@@ -1176,8 +1188,7 @@ class PipelineProcessor:
                            for i in range(len(self.raw_image_paths))]
         return base_file_names
     
-
-    def _get_irradiance_spectrum_paths(self):
+    def _get_raw_spectrum_paths(self):
         spec_paths = []
         for raw_image_path in self.raw_image_paths:
             spec_base_name = raw_image_path.name.split('_')[0]
@@ -1208,6 +1219,27 @@ class PipelineProcessor:
         else:
             raise ValueError(f'More than one irradiance calibration file (*.dcp) found in {self.calibration_dir}')
         
+    def _get_radiance_image_paths(self):
+        rad_image_paths = []
+        for base_file_name in self.base_file_names:
+            rad_im_path = self.radiance_dir / (base_file_name + '_radiance.bip.hdr')
+            rad_image_paths.append(rad_im_path if rad_im_path.exists() else None)
+        return rad_image_paths
+
+
+    def _get_reflectance_image_paths(self):
+        refl_image_paths = []
+        for base_file_name in self.base_file_names:
+            refl_im_path = self.reflectance_dir / (base_file_name + '_reflectance.bip.hdr')
+            refl_image_paths.append(refl_im_path if refl_im_path.exists() else None)
+        return refl_image_paths
+    
+    def _get_irradiance_spec_paths(self):
+        irrad_spec_paths = []
+        for base_file_name in self.base_file_names:
+            irs_path = self.radiance_dir / (base_file_name + '_irradiance.spec.hdr')
+            irrad_spec_paths.append(irs_path if irs_path.exists() else None)
+        return irrad_spec_paths
 
     def convert_raw_images_to_radiance(self):
         logging.info('---- RADIANCE CONVERSION ----')
@@ -1222,6 +1254,7 @@ class PipelineProcessor:
             except Exception as e:
                 logging.warning(f'Error occured while processing {raw_image_path}',exc_info=True)
                 logging.warning('Skipping file')
+        self.radiance_image_paths = self._get_radiance_image_paths()
 
 
     def convert_raw_spectra_to_irradiance(self):
@@ -1238,7 +1271,6 @@ class PipelineProcessor:
                 except Exception as e:
                     logging.error(f'Error occured while processing {raw_spec_path}',exc_info=True)
                     logging.error('Skipping file')
-
 
 
     def calibrate_irradiance_wavelengths(self):
@@ -1258,18 +1290,54 @@ class PipelineProcessor:
                     logging.error('Skipping file')
 
 
-    # def convert_radiance_images_to_reflectance(self):
-    #     logging.info('---- REFLECTANCE CONVERSION ----')
-    #     self.reflectance_dir.mkdir(exist_ok=True)
-    #     reflectance_converter = ReflectanceConverter()
-    #     radiance_image_paths = self.radiance_dir.glob('*.bip.hdr')
-    #     irradiance_spec_paths = self.radiance_dir.glob('*.spec.hdr')
-    #     for base_file_name in self.base_file_names:
-            
+    def convert_radiance_images_to_reflectance(self):
+        logging.info('---- REFLECTANCE CONVERSION ----')
+        self.reflectance_dir.mkdir(exist_ok=True)
+        reflectance_converter = ReflectanceConverter()
+        radiance_image_paths = self._get_radiance_image_paths()
+        irradiance_spec_paths = self._get_irradiance_spec_paths()
+
+        if all([rp is None for rp in radiance_image_paths]):
+            warnings.warn(f'No radiance images found in {self.radiance_dir}')
+        if all([irp is None for irp in irradiance_spec_paths]):
+            warnings.warn(f'No irradiance spectra found in {self.radiance_dir}')
+        
+        for rad_path, irrad_path, base_file_name in zip(
+            radiance_image_paths,irradiance_spec_paths,self.base_file_names):
+            if (rad_path is not None) and (irrad_path is not None):
+                logging.info(f'Converting {rad_path.name} to reflectance.')
+                refl_path = self.reflectance_dir / (base_file_name + '_reflectance.bip.hdr')
+                try:
+                    reflectance_converter.convert_radiance_file_to_reflectance(
+                        rad_path, irrad_path, refl_path
+                    )
+                except Exception as e:
+                    logging.error(f'Error occured while processing {rad_path}',exc_info=True)
+                    logging.error('Skipping file')
 
 
-    def run(self):
-        self.convert_raw_images_to_radiance()
-        self.convert_raw_images_to_radiance()
-        self.calibrate_irradiance_wavelengths()
-        self.convert_radiance_images_to_reflectance()
+    def run(self,
+            convert_raw_images_to_radiance = True,
+            convert_raw_spectra_to_irradiance = True,
+            calibrate_irradiance_wavelengths = True,
+            convert_radiance_to_reflectance = True):
+        if convert_raw_images_to_radiance:
+            try:
+                self.convert_raw_images_to_radiance()
+            except Exception as e:
+                logging.error('Error while converting raw images to radiance', exc_info=True)
+        if convert_raw_spectra_to_irradiance:
+            try:
+                self.convert_raw_spectra_to_irradiance()
+            except Exception as e:
+                logging.error('Error while converting raw spectra to irradiance', exc_info=True)
+        if calibrate_irradiance_wavelengths:
+            try:
+                self.calibrate_irradiance_wavelengths()
+            except Exception as e:
+                logging.error('Error while calibrating irradiance wavelengths', exc_info=True)
+        if convert_radiance_to_reflectance:
+            try:
+                self.convert_radiance_images_to_reflectance()
+            except Exception as e:
+                logging.error('Error while converting from radiance to reflectance', exc_info=True)
