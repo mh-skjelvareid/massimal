@@ -70,7 +70,7 @@ def read_envi(
             except Exception as e:
                 logging.error(f"Unsucessful when reading modified header file {header_path}",exc_info=True)
                 return
-            print(f"Successfully read modified header file {header_path}")
+            logging.info(f"Successfully read modified header file {header_path}")
 
     # Read wavelengths
     if "wavelength" in im_handle.metadata:
@@ -843,8 +843,8 @@ class WavelengthCalibrator:
             try:
                 spec, wl, _ = read_envi(spectrum_path)
             except OSError as error:
-                print(f"Error opening spectrum {spectrum_path}")
-                print("Skipping spectrum.")
+                logging.warning(f"Error opening spectrum {spectrum_path}",exc_info=True)
+                logging.warning("Skipping spectrum.")
             spectra.append(np.squeeze(spec))
 
         spectra = np.array(spectra)
@@ -912,13 +912,13 @@ class IrradianceConverter:
                 for filename in zip_file.namelist():
                     zip_file.extract(filename, self.irrad_cal_dir)
         except zipfile.BadZipFile:
-            print(f"File {self.irrad_cal_file} is not a valid ZIP file.")
+            logging.error(f"File {self.irrad_cal_file} is not a valid ZIP file.",exc_info=True)
         except Exception as e:
-            print(
-                "An unexpected error occured when extracting downwelling calibration file "
-                f"{self.irrad_cal_file}"
+            logging.error(
+                f"Error while extracting downwelling calibration file {self.irrad_cal_file}",
+                exc_info=True
             )
-            print(e)
+
 
     def _load_cal_dark_and_sensitivity_spectra(self):
         """Load dark current and irradiance sensitivity spectra from cal. files"""
@@ -1080,14 +1080,43 @@ class ReflectanceConverter:
         save_envi(reflectance_image_header,refl_im,refl_meta)
 
 
+class GlintCorrector:
+
+    def __init__(self,method='flat_spec'):
+        self.method = method
+
+    @staticmethod
+    def get_nir_ind(wl,nir_band=(740,805),nir_ignore_band=(753,773)):
+        nir_ind = (wl>=nir_band[0]) & (wl<=nir_band[1])
+        ignore_ind = (wl>=nir_ignore_band[0]) & (wl<=nir_ignore_band[1])
+        nir_ind = nir_ind & ~ignore_ind
+        return nir_ind
+
+    def remove_glint_flat_spec(self,refl_image,refl_wl):
+        nir_ind = self.get_nir_ind(refl_wl)
+        nir_im = np.mean(refl_image[:,:,nir_ind],axis=2,keepdims=True)
+        refl_image_glint_corr = refl_image - nir_im
+        return refl_image_glint_corr
+
+    def process_image_file(self,image_path,
+                           glint_corr_image_path):
+        image, wl, metadata = read_envi(image_path)
+        glint_corr_image = self.remove_glint_flat_spec(image, wl)
+        save_envi(glint_corr_image_path,glint_corr_image,metadata)
+        
+
+
+
+
 class PipelineProcessor:
 
     def __init__(self,dataset_dir:Union[Path,str]):
-        self.dataset_dir = dataset_dir
+        self.dataset_dir = Path(dataset_dir)
         self.dataset_base_name = dataset_dir.name
         self.raw_dir = dataset_dir / '0_raw'
         self.radiance_dir = dataset_dir / '1_radiance'
-        self.reflectance_dir = dataset_dir / '2_reflectance'
+        self.reflectance_dir = dataset_dir / '2a_reflectance'
+        # self.wl_reflectance_dir = dataset_dir / '2b_reflectance_gc'
         self.calibration_dir = dataset_dir / 'calibration'
         self.logs_dir = dataset_dir / 'logs'
 
@@ -1101,17 +1130,18 @@ class PipelineProcessor:
         self.raw_image_paths = sorted(self.raw_image_paths,key=self.get_image_number)
         self._validate_raw_files()
 
-        # Initialize lists of processed file paths
-        self.radiance_image_paths = [None for _ in range(len(self.raw_image_paths))]
-        self.irradiance_spec_paths = [None for _ in range(len(self.raw_image_paths))]
-        self.reflectance_image_paths = [None for _ in range(len(self.raw_image_paths))]
+        # Search for irradiance spectrum files
+        self.raw_spec_paths = self._get_raw_spectrum_paths()
         
         # Create "base" file names numbered from 0
         self.base_file_names = self._create_base_file_names()
-        
-        # Search for irradiance spectrum files
-        self.raw_spec_paths = self._get_raw_spectrum_paths()
 
+        # Initialize lists of processed file paths
+        self.radiance_image_paths = self._get_radiance_image_paths()
+        self.irradiance_spec_paths = self._get_irradiance_spec_paths()
+        self.reflectance_image_paths = self._get_reflectance_image_paths()
+        # self.gc_reflectance_image_paths = self._get_gc_reflectance_image_paths()
+        
         # Get calibration file paths
         self.radiance_calibration_file = self._get_radiance_calibration_path()
         self.irradiance_calibration_file = self._get_irradiance_calibration_path()
@@ -1271,6 +1301,7 @@ class PipelineProcessor:
                 except Exception as e:
                     logging.error(f'Error occured while processing {raw_spec_path}',exc_info=True)
                     logging.error('Skipping file')
+        self.irradiance_spec_paths = self._get_irradiance_spec_paths()
 
 
     def calibrate_irradiance_wavelengths(self):
@@ -1314,6 +1345,7 @@ class PipelineProcessor:
                 except Exception as e:
                     logging.error(f'Error occured while processing {rad_path}',exc_info=True)
                     logging.error('Skipping file')
+        self.reflectance_image_paths = self._get_reflectance_image_paths()
 
 
     def run(self,
