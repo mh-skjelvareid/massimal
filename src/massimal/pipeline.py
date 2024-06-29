@@ -12,6 +12,18 @@ import logging
 from datetime import datetime
 import json
 
+# Initialize logger
+logger = logging.getLogger(__name__) 
+logger.setLevel(logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s %(levelname)s: %(message)s',
+    datefmt='%H:%M:%S',
+    level = logging.INFO,
+    handlers=[logging.StreamHandler()]
+)
+
+
+
 def read_envi(
     header_path: Union[Path, str],
     image_path: Union[Path, str, None] = None,
@@ -63,14 +75,14 @@ def read_envi(
                 with open(header_path, "a") as file:
                     file.write("byte order = 0\n")
             except OSError:
-                logging.error(f"Error writing to header file {header_path}",exc_info=True)
+                logger.error(f"Error writing to header file {header_path}",exc_info=True)
             
             try:
                 im_handle = spectral.io.envi.open(header_path, image_path)
             except Exception as e:
-                logging.error(f"Unsucessful when reading modified header file {header_path}",exc_info=True)
+                logger.error(f"Unsucessful when reading modified header file {header_path}",exc_info=True)
                 return
-            logging.info(f"Successfully read modified header file {header_path}")
+            logger.info(f"Successfully read modified header file {header_path}")
 
     # Read wavelengths
     if "wavelength" in im_handle.metadata:
@@ -272,17 +284,17 @@ class RadianceCalibrationDataset:
     def _unzip_calibration_file(self, unzip_into_nonempty_dir: bool = False) -> None:
         """Unzip *.icp file (which is a zip file)"""
         if not unzip_into_nonempty_dir and any(list(self.calibration_dir.iterdir())):
-            logging.info(f"Non-empty calibration directory {self.calibration_dir}")
-            logging.info('Assuming calibration file already unzipped.')
+            logger.info(f"Non-empty calibration directory {self.calibration_dir}")
+            logger.info('Assuming calibration file already unzipped.')
             return
         try:
             with zipfile.ZipFile(self.calibration_file, mode="r") as zip_file:
                 for filename in zip_file.namelist():
                     zip_file.extract(filename, self.calibration_dir)
         except zipfile.BadZipFile:
-            logging.error(f"File {self.calibration_file} is not a valid ZIP file.",exc_info=True)
+            logger.error(f"File {self.calibration_file} is not a valid ZIP file.",exc_info=True)
         except Exception as e:
-            logging.error(f"Unexpected error when extracting calibration file {self.calibration_file}",
+            logger.error(f"Unexpected error when extracting calibration file {self.calibration_file}",
                           exc_info=True)
 
 
@@ -699,10 +711,10 @@ class IrradianceConverter:
     def _unzip_irrad_cal_file(self, unzip_into_nonempty_dir: bool = False) -> None:
         """Unzip *.dcp file (which is a zip file)"""
         if not unzip_into_nonempty_dir and any(list(self.irrad_cal_dir.iterdir())):
-            logging.info(
+            logger.info(
                 f"Non-empty downwelling calibration directory {self.irrad_cal_dir}"
             )
-            logging.info(
+            logger.info(
                 f"Skipping unzipping of downwelling calibration file, "
                 "assuming unzipping already done."
             )
@@ -712,9 +724,9 @@ class IrradianceConverter:
                 for filename in zip_file.namelist():
                     zip_file.extract(filename, self.irrad_cal_dir)
         except zipfile.BadZipFile:
-            logging.error(f"File {self.irrad_cal_file} is not a valid ZIP file.",exc_info=True)
+            logger.error(f"File {self.irrad_cal_file} is not a valid ZIP file.",exc_info=True)
         except Exception as e:
-            logging.error(
+            logger.error(
                 f"Error while extracting downwelling calibration file {self.irrad_cal_file}",
                 exc_info=True
             )
@@ -973,8 +985,8 @@ class WavelengthCalibrator:
             try:
                 spec, wl, _ = read_envi(spectrum_path)
             except OSError as error:
-                logging.warning(f"Error opening spectrum {spectrum_path}",exc_info=True)
-                logging.warning("Skipping spectrum.")
+                logger.warning(f"Error opening spectrum {spectrum_path}",exc_info=True)
+                logger.warning("Skipping spectrum.")
             spectra.append(np.squeeze(spec))
 
         spectra = np.array(spectra)
@@ -1173,9 +1185,9 @@ class PipelineProcessor:
         self.irradiance_calibration_file = self._get_irradiance_calibration_path()
 
         # Configure logging
-        self._configure_logging()
+        self._configure_file_logging()
 
-    def _configure_logging(self):
+    def _configure_file_logging(self):
         """ Configure logging for pipeline """
 
         # Create log file path
@@ -1184,43 +1196,16 @@ class PipelineProcessor:
         log_file_name = f'{timestamp}_{self.dataset_base_name}.log'
         log_path = self.logs_dir / log_file_name
 
-        # Basic configuration ("root" logger)
-        logging.basicConfig(
-            format='%(asctime)s %(levelname)s: %(message)s',
-            datefmt='%H:%M:%S',
-            level = logging.INFO,
-            handlers=[
-                logging.FileHandler(log_path,mode='w'),
-                logging.StreamHandler()
-            ]
-        )
-        logging.info('Logging started.')
-
-        """ Possible logger object setup: 
-        # Create logger object
-        self.logger = logging.getLogger(__name__) 
-        self.logger.setLevel(logging.INFO)
-        
-        # Create output handlers
-        stream_handler = logging.StreamHandler()
-        stream_handler.setLevel(logging.INFO)
+        # Add file handler to module-level logger
         file_handler = logging.FileHandler(log_path)
-        file_handler.setLevel(logging.INFO)
-        
-        # Define output format
         formatter = logging.Formatter(
             fmt = '%(asctime)s %(levelname)s: %(message)s',
             datefmt = '%H:%M:%S'
         )
-        stream_handler.setFormatter(formatter)
         file_handler.setFormatter(formatter)
-
-        # Create logger and assign handlers
-        self.logger.addHandler(stream_handler)
-        self.logger.addHandler(file_handler)
-        self.logger.info('Logging started.')
-        """
-
+        file_handler.setLevel(logging.INFO)
+        logger.addHandler(file_handler)
+        logger.info('File logging initialized.')
 
 
     def _validate_raw_files(self):
@@ -1298,40 +1283,40 @@ class PipelineProcessor:
         return irrad_spec_paths
 
     def convert_raw_images_to_radiance(self):
-        logging.info('---- RADIANCE CONVERSION ----')
+        logger.info('---- RADIANCE CONVERSION ----')
         self.radiance_dir.mkdir(exist_ok=True)
         radiance_converter = RadianceConverter(self.radiance_calibration_file)
         for raw_image_path, base_file_name in zip(self.raw_image_paths,self.base_file_names):
-            logging.info(f'Converting {base_file_name} to radiance')
+            logger.info(f'Converting {base_file_name} to radiance')
             radiance_file_name = f'{base_file_name}_radiance.bip.hdr'
             radiance_image_path = self.radiance_dir / radiance_file_name
             try:
                 radiance_converter.convert_raw_file_to_radiance(raw_image_path,radiance_image_path)
             except Exception as e:
-                logging.warning(f'Error occured while processing {raw_image_path}',exc_info=True)
-                logging.warning('Skipping file')
+                logger.warning(f'Error occured while processing {raw_image_path}',exc_info=True)
+                logger.warning('Skipping file')
         self.radiance_image_paths = self._get_radiance_image_paths()
 
 
     def convert_raw_spectra_to_irradiance(self):
-        logging.info('---- IRRADIANCE CONVERSION ----')
+        logger.info('---- IRRADIANCE CONVERSION ----')
         self.radiance_dir.mkdir(exist_ok=True)
         irradiance_converter = IrradianceConverter(self.irradiance_calibration_file)
         for raw_spec_path, base_file_name in zip(self.raw_spec_paths,self.base_file_names):
             if raw_spec_path is not None:
-                logging.info(f'Converting {base_file_name} to downwelling irradiance')
+                logger.info(f'Converting {base_file_name} to downwelling irradiance')
                 irradiance_file_name = f'{base_file_name}_irradiance.spec.hdr'
                 irradiance_spec_path = self.radiance_dir / irradiance_file_name
                 try:
                     irradiance_converter.convert_raw_file_to_irradiance(raw_spec_path,irradiance_spec_path)
                 except Exception as e:
-                    logging.error(f'Error occured while processing {raw_spec_path}',exc_info=True)
-                    logging.error('Skipping file')
+                    logger.error(f'Error occured while processing {raw_spec_path}',exc_info=True)
+                    logger.error('Skipping file')
         self.irradiance_spec_paths = self._get_irradiance_spec_paths()
 
 
     def calibrate_irradiance_wavelengths(self):
-        logging.info('---- IRRADIANCE WAVELENGTH CALIBRATION ----')
+        logger.info('---- IRRADIANCE WAVELENGTH CALIBRATION ----')
         if not(self.radiance_dir.exists()):
             raise FileNotFoundError('Radiance folder with irradiance spectra does not exist')
         wavelength_calibrator = WavelengthCalibrator()
@@ -1339,16 +1324,16 @@ class PipelineProcessor:
         if irradiance_spec_paths:
             wavelength_calibrator.fit_batch(irradiance_spec_paths)
             for irradiance_spec_path in irradiance_spec_paths:
-                logging.info(f'Calibrating wavelengths for {irradiance_spec_path.name}')
+                logger.info(f'Calibrating wavelengths for {irradiance_spec_path.name}')
                 try:
                     wavelength_calibrator.update_header_wavelengths(irradiance_spec_path)
                 except Exception as e:
-                    logging.error(f'Error occured while processing {irradiance_spec_path}',exc_info=True)
-                    logging.error('Skipping file')
+                    logger.error(f'Error occured while processing {irradiance_spec_path}',exc_info=True)
+                    logger.error('Skipping file')
 
 
     def convert_radiance_images_to_reflectance(self):
-        logging.info('---- REFLECTANCE CONVERSION ----')
+        logger.info('---- REFLECTANCE CONVERSION ----')
         self.reflectance_dir.mkdir(exist_ok=True)
         reflectance_converter = ReflectanceConverter()
         radiance_image_paths = self._get_radiance_image_paths()
@@ -1362,15 +1347,15 @@ class PipelineProcessor:
         for rad_path, irrad_path, base_file_name in zip(
             radiance_image_paths,irradiance_spec_paths,self.base_file_names):
             if (rad_path is not None) and (irrad_path is not None):
-                logging.info(f'Converting {rad_path.name} to reflectance.')
+                logger.info(f'Converting {rad_path.name} to reflectance.')
                 refl_path = self.reflectance_dir / (base_file_name + '_reflectance.bip.hdr')
                 try:
                     reflectance_converter.convert_radiance_file_to_reflectance(
                         rad_path, irrad_path, refl_path
                     )
                 except Exception as e:
-                    logging.error(f'Error occured while processing {rad_path}',exc_info=True)
-                    logging.error('Skipping file')
+                    logger.error(f'Error occured while processing {rad_path}',exc_info=True)
+                    logger.error('Skipping file')
         self.reflectance_image_paths = self._get_reflectance_image_paths()
 
 
@@ -1383,19 +1368,19 @@ class PipelineProcessor:
             try:
                 self.convert_raw_images_to_radiance()
             except Exception as e:
-                logging.error('Error while converting raw images to radiance', exc_info=True)
+                logger.error('Error while converting raw images to radiance', exc_info=True)
         if convert_raw_spectra_to_irradiance:
             try:
                 self.convert_raw_spectra_to_irradiance()
             except Exception as e:
-                logging.error('Error while converting raw spectra to irradiance', exc_info=True)
+                logger.error('Error while converting raw spectra to irradiance', exc_info=True)
         if calibrate_irradiance_wavelengths:
             try:
                 self.calibrate_irradiance_wavelengths()
             except Exception as e:
-                logging.error('Error while calibrating irradiance wavelengths', exc_info=True)
+                logger.error('Error while calibrating irradiance wavelengths', exc_info=True)
         if convert_radiance_to_reflectance:
             try:
                 self.convert_radiance_images_to_reflectance()
             except Exception as e:
-                logging.error('Error while converting from radiance to reflectance', exc_info=True)
+                logger.error('Error while converting from radiance to reflectance', exc_info=True)
