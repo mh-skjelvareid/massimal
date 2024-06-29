@@ -1273,17 +1273,17 @@ class GlintCorrector:
 class ImageFlightSegment:
 
     def __init__(self,imu_data,image_shape,camera_opening_angle=36.5,pitch_offset=0.0,roll_offset=0.0,
-                 altitude_offset = 0.0,altitude_from_square_pixels=True):
+                 altitude_offset = 0.0,assume_square_pixels=True):
         
         # Set input attributes
         self.imu_data = imu_data
-        self.n_pix_y = image_shape[0]
-        self.n_pix_x = image_shape[1]
+        self.image_shape = image_shape[0:2]
         self.camera_opening_angle = camera_opening_angle
         self.pitch_offset = pitch_offset
         self.roll_offset = roll_offset
         self.altitude_offset = altitude_offset
 
+        # Get UTM coordinates and CRS code
         utm_x,utm_y,utm_epsg = convert_long_lat_to_utm(imu_data['longitude'],
                                                imu_data['latitude'],
                                                return_utm_epsg=True)
@@ -1291,12 +1291,128 @@ class ImageFlightSegment:
         self.utm_y = utm_y
         self.utm_epsg = utm_epsg
         
+        # Time-related attributes
+        t_total, dt = self._calc_time_attributes()
         t = imu_data['time']
         self.dt = np.mean(np.diff(t))
         self.t_total = t[-1] - t[0]
 
-        self._set_velocity_attributes()
+        # Along-track properties
+        v_at, u_at, gsd_at, sl = self._calc_alongtrack_properties()
+        self.v_alongtrack = v_at
+        self.u_alongtrack = u_at
+        self.gsd_alongtrack = gsd_at
+        self.swath_length = sl
+        
+        # Altitude
+        self.mean_altitude = self._calc_mean_altitude(assume_square_pixels)
 
+        # Cross-track properties
+        u_ct, sw, gsd_ct = self._calc_crosstrack_properties()
+        self.u_crosstrack = u_ct
+        self.swath_width = sw
+        self.gsd_crosstrack = gsd_ct
+
+        # Image origin (image transform offset)
+        self.image_origin = self._calc_image_origin()
+
+
+    def _calc_time_attributes(self):
+        t = np.array(self.imu_data['time'])
+        dt = np.mean(np.diff(t))
+        t_total = len(t)*dt
+        return t_total, dt
+    
+    def _calc_alongtrack_properties(self):
+        vx_alongtrack = (self.x[-1] - self.x[0]) / self.t_total
+        vy_alongtrack = (self.y[-1] - self.y[0]) / self.t_total
+        v_alongtrack = np.array((vx_alongtrack,vy_alongtrack))
+        u_alongtrack = v_alongtrack / np.linalg.norm(v_alongtrack)
+        
+        swath_length = self.t_total*self.v_alongtrack
+        gsd_alongtrack = self.dt*np.linalg.norm(v_alongtrack)
+
+        return v_alongtrack, u_alongtrack, gsd_alongtrack, swath_length
+    
+    def _calc_mean_altitude(self,assume_square_pixels):
+        """ Calculate mean altitude of uav during imaging
+        
+        Arguments:
+        assume_square_pixels: bool
+            If true, the across-track sampling distance is assumed to
+            be equal to the alongtrack sampling distance. The altitude 
+            is calculated based on this and the number of cross-track samples.
+            If false, the mean of the altitude values from the imu data 
+            is used. In both cases, the altitude offset is added.
+        """
+        if assume_square_pixels:
+            swath_width = self.gsd_alongtrack*self.image_shape[1]
+            altitude = (2*swath_width)/np.tan(self.camera_opening_angle/2)
+        else:
+            altitude = np.mean(self.imu_data['altitude']) 
+        return altitude + self.altitude_offset
+
+
+    def _calc_crosstrack_properties(self):
+        u_crosstrack = np.array([-self.u_alongtrack[1],self.u_alongtrack[0]]) # Rotate 90 cw
+        swath_width = 2*self.mean_altitude*np.tan(self.camera_opening_angle/2)
+        gsd_crosstrack = swath_width/self.image_shape[1]
+        return u_crosstrack, swath_width, gsd_crosstrack
+    
+    def _calc_image_origin(self):
+
+        alongtrack_offset = self.mean_altitude*np.tan(self.pitch_offset)*self.u_alongtrack
+        crosstrack_offset = self.mean_altitude*np.tan(self.roll_offset)*self.u_crosstrack
+
+        camera_origin = np.array([self.x[0], self.y[0]]) # "Middle" of swath
+        image_origin = (camera_origin
+                        - 0.5*self.swath_width*self.u_crosstrack # Edge of swath
+                        - crosstrack_offset
+                        + alongtrack_offset)
+        return image_origin
+
+    def get_image_transform(self,ordering='alphabetical'):
+        """ Get 6-element affine transform for image
+        
+        Keyword arguments: 
+        ------------------
+        ordering: ['alphabetical','worldfile']
+            If 'alphabetical', return A,B,C,D,E,F
+            If 'worldfile', return A,D,B,E,C,F
+            See https://en.wikipedia.org/wiki/World_file 
+        """
+        A,D = self.gsd_crosstrack*self.u_crosstrack
+        B,E = self.gsd_alongtrack*self.u_alongtrack
+        C,F = self.image_origin
+
+        if ordering == 'alphabetical':
+            return A,B,C,D,E,F
+        elif ordering == 'worldfile':
+            return A,D,B,E,C,F
+        else:
+            error_msg = f'Invalid ordering argument {ordering}'
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+
+    # C,F = r_origin
+
+    # # Calculate B (x-skew) and E (y-scale)
+    # image_dt = 1/framerate    # Image line sampling period
+    # B = vx_alongtrack*image_dt
+    # E = vy_alongtrack*image_dt
+
+    # # Calculate A (x-scale) and D (y-skew)
+    # cross_track_gsd = L/n_crosstrack_pixels  # Distance between pixels cross-track
+    # A,D = cross_track_gsd * u_crosstrack
+
+    # # Return
+    # if use_world_file_ordering:
+    #     return (A,D,B,E,C,F), utm_epsg
+    # else:
+    #     return (A,B,C,D,E,F), utm_epsg
+
+"""
 
     @staticmethod
     def _get_uav_velocity_vectors(t,x,y):
@@ -1341,6 +1457,7 @@ class ImageFlightSegment:
         # Time and space resolution
         dt = np.mean(np.diff(imu_data['time']))
         pixel_size = dt*np.linalg.norm(v_alongtrack)
+"""
 
 
 
