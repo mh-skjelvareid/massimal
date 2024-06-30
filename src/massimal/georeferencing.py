@@ -64,6 +64,9 @@ def read_lcf_file(lcf_file_path, time_rel_to_file_start = True):
     # Notes:
     - The LCF file format was shared by Casey Smith at Resonon on February 16. 2021.
     - The LCF specification was inherited from Space Computer Corp.
+    - Roll is often defined in the opposite direction from that used here,
+    e.g. "left wing up" is positive roll. However, here the original direction
+    is kept.
     """
 
     # Load LCF data
@@ -187,7 +190,7 @@ def calculate_pushbroom_imager_transform(time,longitude,latitude,altitude,framer
     u_alongtrack = v_alongtrack / np.linalg.norm(v_alongtrack)
     
     # Calculate cross-track unit vector
-    u_crosstrack = np.array([-u_alongtrack[1],u_alongtrack[0]]) # Rotate 90 clockwise: (x,y) -> (-y,x)
+    u_crosstrack = np.array([-u_alongtrack[1],u_alongtrack[0]]) # Rotate 90 degrees counterclockwise: (x,y) -> (-y,x)
 
     # Calculate length of pushbroom "footprint" on ground
     relative_altitude = np.mean(altitude) - ground_altitude

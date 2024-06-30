@@ -627,14 +627,21 @@ class RadianceConverter:
 
         Returns:
         --------
-        radiance_image: np.ndarray (int16)
+        radiance_image: np.ndarray (int16, microflicks)
             Radiance image with same shape as raw image, with spectral radiance
-            in units of microflicks.
+            in units of microflicks = 10e-5 W/(m2*nm). Microflicks are used 
+            to be consistent with Resonon formatting, and because microflick 
+            values typically are in a range suitable for (memory-efficient) 
+            encoding as 16-bit unsigned integer. 
 
         Raises:
         -------
         ValueError:
             In case the raw image does not have the expected dimensions.
+
+        References:
+        -----------
+        - ["flick" unit](https://en.wikipedia.org/wiki/Flick_(physics))
         """
         # Check input dimensions
         if (
@@ -810,16 +817,16 @@ class IrradianceConverter:
         Returns:
         --------
         irradiance_spectrum: np.ndarray, shape (n_wl,)
-            Spectrom converted to spectral irradiance in units (TODO: check units)
+            Spectrom converted to spectral irradiance, unit W/(m2*nm)
         wl: np.ndarray, shape (n_wl,)
             Wavelengths for each element in irradiance spectrum
 
         Notes:
         -------
-        The irradiance sensitivity spectrum is _inversely_ scaled with
+        The irradiance conversion spectrum is _inversely_ scaled with
         the input spectrum shutter. E.g., if the input spectrum has a higher shutter
         value than the calibration file (i.e. higher values per amount of photons),
-        the sensitivity spectrum values are decreased to account for this.
+        the conversion spectrum values are decreased to account for this.
         Dark current is assumed to be independent of shutter value.
         """
 
@@ -829,15 +836,18 @@ class IrradianceConverter:
         if raw_spec.ndim > 1:
             raise ValueError("Raw irradiance spectrum must be a 1D array.")
 
-        # Scale sensitivity spectrum according to difference in shutter values
+        # Scale conversion spectrum according to difference in shutter values
         raw_shutter = float(raw_metadata["shutter"])
-        scaled_sens_spec = (
+        scaled_conv_spec = (
             self._irrad_sens_shutter / raw_shutter
         ) * self._irrad_sens_spec
 
-        # Subtract dark current, convert to irradiance 
-        # TODO: Double-check physical units and multiplication with pi
-        cal_irrad_spec = (raw_spec - self._cal_dark_spec) * (scaled_sens_spec * np.pi)
+        # Subtract dark current, multiply with radiance conversion spectrum
+        # NOTE: Resonon irradiance unit is uW/(pi*cm2*um) = 10e-5 W/(pi*m2*nm)
+        cal_irrad_spec = (raw_spec - self._cal_dark_spec) * scaled_conv_spec
+
+        # Convert to standard spectral irradiance unit W/(m2*nm)
+        cal_irrad_spec = cal_irrad_spec*(np.pi/100_000)
 
         # Set spectrum outside wavelength limits to zero
         if set_irradiance_outside_wl_limits_to_zero:
@@ -852,9 +862,10 @@ class IrradianceConverter:
         self, raw_spec_path: Union[Path, str], irrad_spec_path: Union[Path, str]
     ):
         """Read raw spectrum, convert to irradiance, and save"""
-        raw_spec, _, raw_metadata = read_envi(raw_spec_path)
-        irrad_spec = self.convert_raw_spectrum_to_irradiance(raw_spec, raw_metadata)
-        save_envi(irrad_spec_path, irrad_spec, raw_metadata)
+        raw_spec, _, spec_metadata = read_envi(raw_spec_path)
+        irrad_spec = self.convert_raw_spectrum_to_irradiance(raw_spec, spec_metadata)
+        spec_metadata['unit'] = 'W/(m2*nm)'
+        save_envi(irrad_spec_path, irrad_spec, spec_metadata)
 
 
 class WavelengthCalibrator:
@@ -1202,7 +1213,18 @@ class ReflectanceConverter:
         gauss_fwhm: float = 3.5,  # TODO: Find "optimal" default value for Pika-L
         smooth_with_savitsky_golay = False,
     ):
-        """Convert radiance image to reflectance using downwelling spectrum"""
+        """Convert radiance image to reflectance using downwelling spectrum 
+        
+        Arguments:
+        ----------
+
+        rad_image:
+            Spectral radiance image in units of microflicks = 10e-5 W/(sr*m2*nm)
+
+        irrad_spec:
+            Spectral irradiance in units of W/(m2*nm)
+        
+        """
 
         # Check that spectrum is 1D, then expand to 3D for broadcasting
         irrad_spec = np.squeeze(irrad_spec)
@@ -1214,6 +1236,7 @@ class ReflectanceConverter:
         rad_image = rad_image[:, :, valid_image_wl_ind]
 
         # Make irradiance spectrum compatible with image
+        irrad_spec = irrad_spec*100_000 # Convert from W/(m2*nm) to uW/(cm2*um)
         if convolve_irradiance_with_gaussian:
             irrad_spec = self.conv_spec_with_gaussian(irrad_spec, irrad_wl, gauss_fwhm)
         irrad_spec = self.interpolate_irrad_to_image_wl(irrad_spec, irrad_wl, rad_wl)
@@ -1271,6 +1294,22 @@ class GlintCorrector:
         
 
 class ImageFlightSegment:
+    """
+    
+    Attributes:
+    -----------
+    u_alongtrack: 
+        Unit vector (easting, northing) pointing along flight direction
+    u_crosstrack:
+        Unit vector (easting, northing) pointing left relative to
+        flight direction. The direction is chosen to match that of
+        the image coordinate system: Origin in upper left corner,
+        down (increasing line number) corresponds to positive along-track
+        direction, right (increasing sample number) corresponds to 
+        positive cross-track direction. 
+
+
+    """
 
     def __init__(self,imu_data,image_shape,camera_opening_angle=36.5,pitch_offset=0.0,roll_offset=0.0,
                  altitude_offset = 0.0,assume_square_pixels=True):
@@ -1354,7 +1393,7 @@ class ImageFlightSegment:
 
 
     def _calc_crosstrack_properties(self):
-        u_crosstrack = np.array([-self.u_alongtrack[1],self.u_alongtrack[0]]) # Rotate 90 cw
+        u_crosstrack = np.array([-self.u_alongtrack[1],self.u_alongtrack[0]]) # Rotate 90 CCW
         swath_width = 2*self.mean_altitude*np.tan(self.camera_opening_angle/2)
         gsd_crosstrack = swath_width/self.image_shape[1]
         return u_crosstrack, swath_width, gsd_crosstrack
@@ -1365,6 +1404,11 @@ class ImageFlightSegment:
         crosstrack_offset = self.mean_altitude*np.tan(self.roll_offset)*self.u_crosstrack
 
         camera_origin = np.array([self.x[0], self.y[0]]) # "Middle" of swath
+        # NOTE: Cross-track elements in equation below are negative because
+        # UTM coordinate system is right-handed and image coordinate system
+        # is left-handed. If the camera_origin is in the middle of the 
+        # top line of the image, u_crosstrack points away from the image 
+        # origin (line 0, sample 0).
         image_origin = (camera_origin
                         - 0.5*self.swath_width*self.u_crosstrack # Edge of swath
                         - crosstrack_offset
