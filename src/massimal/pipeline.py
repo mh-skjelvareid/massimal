@@ -1910,6 +1910,32 @@ class PipelineProcessor:
                     )
                     logger.error("Skipping file")
 
+    def georeference_glint_corrected_reflectance(self):
+        logger.info("---- GEOREFERENCING GLINT CORRECTED REFLECTANCE ----")
+        self.reflectance_gc_rgb_dir.mkdir(exist_ok=True)
+        georeferencer = SimpleGeoreferencer()
+
+        if all([not rp.exists() for rp in self.refl_gc_im_paths]):
+            warnings.warn(f"No reflectance images found in {self.reflectance_gc_dir}")
+
+        for refl_gc_path, imu_data_path, geotiff_path in zip(
+            self.refl_gc_im_paths, self.imu_data_paths, self.refl_gc_rgb_paths
+        ):
+            if refl_gc_path.exists() and imu_data_path.exists():
+                logger.info(
+                    f"Georeferencing and exporting RGB version of {refl_gc_path.name}."
+                )
+                try:
+                    georeferencer.georeference_hyspec_save_geotiff(
+                        refl_gc_path, imu_data_path, geotiff_path, rgb_only=True
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Error occured while georeferencing RGB version of {refl_gc_path}",
+                        exc_info=True,
+                    )
+                    logger.error("Skipping file")
+
     def run(
         self,
         convert_raw_images_to_radiance=True,
