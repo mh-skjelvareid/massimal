@@ -1377,9 +1377,8 @@ class ImageFlightSegment:
 
         # Time-related attributes
         t_total, dt = self._calc_time_attributes()
-        t = imu_data["time"]
-        self.dt = np.mean(np.diff(t))
-        self.t_total = t[-1] - t[0]
+        self.t_total = t_total
+        self.dt = dt
 
         # Along-track properties
         v_at, u_at, gsd_at, sl = self._calc_alongtrack_properties()
@@ -1407,12 +1406,12 @@ class ImageFlightSegment:
         return t_total, dt
 
     def _calc_alongtrack_properties(self):
-        vx_alongtrack = (self.x[-1] - self.x[0]) / self.t_total
-        vy_alongtrack = (self.y[-1] - self.y[0]) / self.t_total
+        vx_alongtrack = (self.utm_x[-1] - self.utm_y[0]) / self.t_total
+        vy_alongtrack = (self.utm_x[-1] - self.utm_y[0]) / self.t_total
         v_alongtrack = np.array((vx_alongtrack, vy_alongtrack))
         u_alongtrack = v_alongtrack / np.linalg.norm(v_alongtrack)
 
-        swath_length = self.t_total * self.v_alongtrack
+        swath_length = self.t_total * v_alongtrack
         gsd_alongtrack = self.dt * np.linalg.norm(v_alongtrack)
 
         return v_alongtrack, u_alongtrack, gsd_alongtrack, swath_length
@@ -1529,6 +1528,7 @@ class PipelineProcessor:
         proc_file_paths = self._create_processed_file_paths()
         self.rad_im_paths = proc_file_paths['radiance']
         self.irrad_spec_paths = proc_file_paths['irradiance']
+        self.imu_data_paths = proc_file_paths['imudata']
         self.refl_im_paths = proc_file_paths['reflectance']
         self.refl_gc_im_paths = proc_file_paths['reflectance_gc']
 
@@ -1580,7 +1580,7 @@ class PipelineProcessor:
                 self.raw_image_paths.remove(raw_image_path)
             else:
                 times_paths.append(times_path)
-                lcf_paths.append(lcf_paths)
+                lcf_paths.append(lcf_path)
         return times_paths, lcf_paths
 
     @staticmethod
@@ -1641,6 +1641,7 @@ class PipelineProcessor:
     def _create_processed_file_paths(self):
         file_paths = {'radiance':[],
                     'irradiance':[],
+                    'imudata':[],
                     'reflectance':[],
                     'reflectance_gc':[]}
 
@@ -1649,6 +1650,8 @@ class PipelineProcessor:
             file_paths['radiance'].append(rad_path)
             irs_path = self.radiance_dir / (base_file_name + "_irradiance.spec.hdr")
             file_paths['irradiance'].append(irs_path)
+            imu_path = self.radiance_dir / (base_file_name + "_imudata.json")
+            file_paths['imudata'].append(imu_path)
             refl_path = self.reflectance_dir / (base_file_name + "_reflectance.bip.hdr")
             file_paths['reflectance'].append(refl_path)
             rgc_path = self.reflectance_gc_dir / (base_file_name + "_reflectance_gc.bip.hdr")
@@ -1719,6 +1722,20 @@ class PipelineProcessor:
                         exc_info=True,
                     )
                     logger.error("Skipping file")
+
+    def parse_and_save_imu_data(self):
+        logger.info("---- IMU DATA PROCESSING ----")
+        self.radiance_dir.mkdir(exist_ok=True)
+        imu_data_parser = ImuDataParser()
+        for lcf_path, times_path, imu_data_path in zip(self.lcf_paths,self.times_paths,self.imu_data_paths):
+            logger.info(f"Processing IMU data from {lcf_path.name}")
+            try:
+                imu_data_parser.read_and_save_imu_data(lcf_path,times_path,imu_data_path)
+            except Exception as e:
+                logger.error(
+                    f"Error occured while processing {lcf_path}", exc_info=True
+                )
+                logger.error("Skipping file")
 
     def convert_radiance_images_to_reflectance(self):
         logger.info("---- REFLECTANCE CONVERSION ----")
