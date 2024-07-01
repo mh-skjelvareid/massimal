@@ -1300,8 +1300,9 @@ class ReflectanceConverter:
 
 class GlintCorrector:
 
-    def __init__(self, method="flat_spec"):
+    def __init__(self, method="flat_spec",smooth_with_savitsky_golay=True):
         self.method = method
+        self.smooth_with_savitsky_golay = smooth_with_savitsky_golay
 
     @staticmethod
     def get_nir_ind(wl, nir_band=(740, 805), nir_ignore_band=(753, 773)):
@@ -1310,16 +1311,23 @@ class GlintCorrector:
         nir_ind = nir_ind & ~ignore_ind
         return nir_ind
 
-    def remove_glint_flat_spec(self, refl_image, refl_wl):
-        nir_ind = self.get_nir_ind(refl_wl)
+    def remove_glint_flat_spec(self, refl_image, refl_wl,**kwargs):
+        nir_ind = self.get_nir_ind(refl_wl,**kwargs)
         nir_im = np.mean(refl_image[:, :, nir_ind], axis=2, keepdims=True)
         refl_image_glint_corr = refl_image - nir_im
+
+        if self.smooth_with_savitsky_golay:
+            refl_image_glint_corr = savitzky_golay_filter(refl_image_glint_corr,**kwargs)
+
         return refl_image_glint_corr
 
-    def process_image_file(self, image_path, glint_corr_image_path):
-        image, wl, metadata = read_envi(image_path)
-        glint_corr_image = self.remove_glint_flat_spec(image, wl)
-        save_envi(glint_corr_image_path, glint_corr_image, metadata)
+    def glint_correct_image_file(self, image_path, glint_corr_image_path,**kwargs):
+        if self.method == "flat_spec":
+            image, wl, metadata = read_envi(image_path)
+            glint_corr_image = self.remove_glint_flat_spec(image, wl,**kwargs)
+            save_envi(glint_corr_image_path, glint_corr_image, metadata)
+        else:
+            raise ValueError(f'Glint correction method {self.method=} invalid.')
 
 
 class ImageFlightSegment:
@@ -1482,54 +1490,6 @@ class ImageFlightSegment:
             raise ValueError(error_msg)
 
 
-"""
-
-    @staticmethod
-    def _get_uav_velocity_vectors(t,x,y):
-        # Calculate along-track velocity vector, and corresponding unit vector
-        t_total = t[-1] - t[0] 
-        vx_alongtrack = (x[-1] - x[0]) / t_total
-        vy_alongtrack = (y[-1] - y[0]) / t_total
-        v_alongtrack = np.array((vx_alongtrack,vy_alongtrack))
-        u_alongtrack = v_alongtrack / np.linalg.norm(v_alongtrack)
-        u_crosstrack = np.array([-u_alongtrack[1],u_alongtrack[0]]) # Rotate 90 cw
-
-        self.v_alongtrack = v_alongtrack
-        return v_alongtrack, u_alongtrack, u_crosstrack
-    
-    def _get_origin(self,x,y,image_shape,pixel_size,u_alongtrack,u_crosstrack):
-        n_pix_x = image_shape[1]
-        swath_width = n_pix_x*pixel_size
-        altitude = ((2*swath_width)/(np.tan(self.camera_opening_angle/2)) 
-                    + self.altitude_offset)
-
-        alongtrack_offset = altitude*np.tan(self.pitch_offset)*u_alongtrack
-        crosstrack_offset = altitude*np.tan(self.roll_offset)*u_alongtrack
-
-        camera_origin = np.array([x[0], y[0]])
-        image_origin = (camera_origin
-                        - 0.5*swath_width*u_crosstrack 
-                        - crosstrack_offset
-                        + alongtrack_offset)
-        return image_origin
-
-    def get_affine_transform_from_imu_data(self,imu_data,image_shape):
-        x,y,utm_epsg = convert_long_lat_to_utm(imu_data['longitude'],
-                                               imu_data['latitude'],
-                                               return_utm_epsg=True)
-        # Number of pixels
-        #n_pix_y, n_pix_x = image_shape[0:2]
-
-        # Get velocity vectors
-        vectors = self._get_uav_velocity_vectors(imu_data['time'],x,y)
-        v_alongtrack, u_alongtrack, u_crosstrack = vectors
-
-        # Time and space resolution
-        dt = np.mean(np.diff(imu_data['time']))
-        pixel_size = dt*np.linalg.norm(v_alongtrack)
-"""
-
-
 class PipelineProcessor:
 
     def __init__(self, dataset_dir: Union[Path, str]):
@@ -1538,35 +1498,39 @@ class PipelineProcessor:
         self.raw_dir = dataset_dir / "0_raw"
         self.radiance_dir = dataset_dir / "1_radiance"
         self.reflectance_dir = dataset_dir / "2a_reflectance"
-        # self.wl_reflectance_dir = dataset_dir / '2b_reflectance_gc'
+        self.reflectance_gc_dir = dataset_dir / '2b_reflectance_gc'
         self.calibration_dir = dataset_dir / "calibration"
         self.logs_dir = dataset_dir / "logs"
+
 
         if not self.raw_dir.exists():
             raise FileNotFoundError(f'Folder "0_raw" not found in {dataset_dir}')
         if not self.calibration_dir.exists():
             raise FileNotFoundError(f'Folder "calibration" not found in {dataset_dir}')
 
-        # Search for ENVI image header files, sort and validate
+        # Get calibration file paths
+        self.radiance_calibration_file = self._get_radiance_calibration_path()
+        self.irradiance_calibration_file = self._get_irradiance_calibration_path()
+
+        # Search for raw files, sort and validate
         self.raw_image_paths = list(self.raw_dir.rglob("*.bil.hdr"))
         self.raw_image_paths = sorted(self.raw_image_paths, key=self.get_image_number)
-        self._validate_raw_files()
+        times_paths, lcf_paths = self._validate_raw_files()
+        self.times_paths = times_paths
+        self.lcf_paths = lcf_paths
 
-        # Search for irradiance spectrum files
+        # Search for raw irradiance spectrum files (not always present)
         self.raw_spec_paths = self._get_raw_spectrum_paths()
 
         # Create "base" file names numbered from 0
         self.base_file_names = self._create_base_file_names()
 
-        # Initialize lists of processed file paths
-        self.radiance_image_paths = self._get_radiance_image_paths()
-        self.irradiance_spec_paths = self._get_irradiance_spec_paths()
-        self.reflectance_image_paths = self._get_reflectance_image_paths()
-        # self.gc_reflectance_image_paths = self._get_gc_reflectance_image_paths()
-
-        # Get calibration file paths
-        self.radiance_calibration_file = self._get_radiance_calibration_path()
-        self.irradiance_calibration_file = self._get_irradiance_calibration_path()
+        # Create lists of processed file paths
+        proc_file_paths = self._create_processed_file_paths()
+        self.rad_im_paths = proc_file_paths['radiance']
+        self.irrad_spec_paths = proc_file_paths['irradiance']
+        self.refl_im_paths = proc_file_paths['reflectance']
+        self.refl_gc_im_paths = proc_file_paths['reflectance_gc']
 
         # Configure logging
         self._configure_file_logging()
@@ -1591,6 +1555,15 @@ class PipelineProcessor:
         logger.info("File logging initialized.")
 
     def _validate_raw_files(self):
+        """ Check that all expected raw files exist 
+        
+        Returns:
+        --------
+        times_paths, lcf_paths: list[Path]
+            Lists of paths to *.times and *.lcf files for every valid raw file
+        """
+        times_paths = []
+        lcf_paths = []
         for raw_image_path in list(self.raw_image_paths):  # Use list() to copy
             file_base_name = raw_image_path.name.split(".")[0]
             binary_im_path = raw_image_path.parent / (file_base_name + ".bil")
@@ -1602,9 +1575,13 @@ class PipelineProcessor:
                 or not (lcf_path.exists())
             ):
                 warnings.warn(
-                    f"Set of raw files for image {raw_image_path} is not complete"
+                    f"Set of raw files for image {raw_image_path} is incomplete."
                 )
                 self.raw_image_paths.remove(raw_image_path)
+            else:
+                times_paths.append(times_path)
+                lcf_paths.append(lcf_paths)
+        return times_paths, lcf_paths
 
     @staticmethod
     def get_image_number(raw_image_path):
@@ -1661,39 +1638,34 @@ class PipelineProcessor:
                 f"More than one irradiance calibration file (*.dcp) found in {self.calibration_dir}"
             )
 
-    def _get_radiance_image_paths(self):
-        rad_image_paths = []
-        for base_file_name in self.base_file_names:
-            rad_im_path = self.radiance_dir / (base_file_name + "_radiance.bip.hdr")
-            rad_image_paths.append(rad_im_path if rad_im_path.exists() else None)
-        return rad_image_paths
+    def _create_processed_file_paths(self):
+        file_paths = {'radiance':[],
+                    'irradiance':[],
+                    'reflectance':[],
+                    'reflectance_gc':[]}
 
-    def _get_reflectance_image_paths(self):
-        refl_image_paths = []
         for base_file_name in self.base_file_names:
-            refl_im_path = self.reflectance_dir / (
-                base_file_name + "_reflectance.bip.hdr"
-            )
-            refl_image_paths.append(refl_im_path if refl_im_path.exists() else None)
-        return refl_image_paths
-
-    def _get_irradiance_spec_paths(self):
-        irrad_spec_paths = []
-        for base_file_name in self.base_file_names:
+            rad_path = self.radiance_dir / (base_file_name + "_radiance.bip.hdr")
+            file_paths['radiance'].append(rad_path)
             irs_path = self.radiance_dir / (base_file_name + "_irradiance.spec.hdr")
-            irrad_spec_paths.append(irs_path if irs_path.exists() else None)
-        return irrad_spec_paths
+            file_paths['irradiance'].append(irs_path)
+            refl_path = self.reflectance_dir / (base_file_name + "_reflectance.bip.hdr")
+            file_paths['reflectance'].append(refl_path)
+            rgc_path = self.reflectance_gc_dir / (base_file_name + "_reflectance_gc.bip.hdr")
+            file_paths['reflectance_gc'].append(rgc_path)
+        return file_paths
+
+
+
 
     def convert_raw_images_to_radiance(self):
         logger.info("---- RADIANCE CONVERSION ----")
         self.radiance_dir.mkdir(exist_ok=True)
         radiance_converter = RadianceConverter(self.radiance_calibration_file)
-        for raw_image_path, base_file_name in zip(
-            self.raw_image_paths, self.base_file_names
+        for raw_image_path, radiance_image_path in zip(
+            self.raw_image_paths, self.rad_im_paths
         ):
-            logger.info(f"Converting {base_file_name} to radiance")
-            radiance_file_name = f"{base_file_name}_radiance.bip.hdr"
-            radiance_image_path = self.radiance_dir / radiance_file_name
+            logger.info(f"Converting {raw_image_path.name} to radiance")
             try:
                 radiance_converter.convert_raw_file_to_radiance(
                     raw_image_path, radiance_image_path
@@ -1703,29 +1675,27 @@ class PipelineProcessor:
                     f"Error occured while processing {raw_image_path}", exc_info=True
                 )
                 logger.warning("Skipping file")
-        self.radiance_image_paths = self._get_radiance_image_paths()
+
 
     def convert_raw_spectra_to_irradiance(self):
         logger.info("---- IRRADIANCE CONVERSION ----")
         self.radiance_dir.mkdir(exist_ok=True)
         irradiance_converter = IrradianceConverter(self.irradiance_calibration_file)
-        for raw_spec_path, base_file_name in zip(
-            self.raw_spec_paths, self.base_file_names
+        for raw_spec_path, irrad_spec_path in zip(
+            self.raw_spec_paths, self.irrad_spec_paths
         ):
             if raw_spec_path is not None:
-                logger.info(f"Converting {base_file_name} to downwelling irradiance")
-                irradiance_file_name = f"{base_file_name}_irradiance.spec.hdr"
-                irradiance_spec_path = self.radiance_dir / irradiance_file_name
+                logger.info(f"Converting {raw_spec_path.name} to downwelling irradiance")
                 try:
                     irradiance_converter.convert_raw_file_to_irradiance(
-                        raw_spec_path, irradiance_spec_path
+                        raw_spec_path, irrad_spec_path
                     )
                 except Exception as e:
                     logger.error(
                         f"Error occured while processing {raw_spec_path}", exc_info=True
                     )
                     logger.error("Skipping file")
-        self.irradiance_spec_paths = self._get_irradiance_spec_paths()
+
 
     def calibrate_irradiance_wavelengths(self):
         logger.info("---- IRRADIANCE WAVELENGTH CALIBRATION ----")
@@ -1754,22 +1724,17 @@ class PipelineProcessor:
         logger.info("---- REFLECTANCE CONVERSION ----")
         self.reflectance_dir.mkdir(exist_ok=True)
         reflectance_converter = ReflectanceConverter()
-        radiance_image_paths = self._get_radiance_image_paths()
-        irradiance_spec_paths = self._get_irradiance_spec_paths()
 
-        if all([rp is None for rp in radiance_image_paths]):
+        if all([not rp.exists() for rp in self.rad_im_paths]):
             warnings.warn(f"No radiance images found in {self.radiance_dir}")
-        if all([irp is None for irp in irradiance_spec_paths]):
+        if all([not irp.exists() for irp in self.irrad_spec_paths]):
             warnings.warn(f"No irradiance spectra found in {self.radiance_dir}")
 
-        for rad_path, irrad_path, base_file_name in zip(
-            radiance_image_paths, irradiance_spec_paths, self.base_file_names
+        for rad_path, irrad_path, refl_path in zip(
+            self.rad_im_paths, self.irrad_spec_paths, self.refl_im_paths
         ):
-            if (rad_path is not None) and (irrad_path is not None):
+            if rad_path.exists() and irrad_path.exists():
                 logger.info(f"Converting {rad_path.name} to reflectance.")
-                refl_path = self.reflectance_dir / (
-                    base_file_name + "_reflectance.bip.hdr"
-                )
                 try:
                     reflectance_converter.convert_radiance_file_to_reflectance(
                         rad_path, irrad_path, refl_path
@@ -1779,7 +1744,30 @@ class PipelineProcessor:
                         f"Error occured while processing {rad_path}", exc_info=True
                     )
                     logger.error("Skipping file")
-        self.reflectance_image_paths = self._get_reflectance_image_paths()
+
+
+    def glint_correct_reflectance_images(self):
+        logger.info("---- GLINT CORRECTION ----")
+        self.reflectance_gc_dir.mkdir(exist_ok=True)
+        glint_corrector = GlintCorrector()
+
+        if all([not rp.exists() for rp in self.refl_im_paths]):
+            warnings.warn(f"No reflectance images found in {self.reflectance_dir}")
+
+        for refl_path,refl_gc_path in zip(
+            self.refl_im_paths, self.refl_gc_im_paths
+        ):
+            if refl_path.exists():
+                logger.info(f"Applying glint correction to {refl_path.name}.")
+                try:
+                    glint_corrector.glint_correct_image_file(
+                        refl_path, refl_gc_path
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Error occured while glint correcting {refl_path}", exc_info=True
+                    )
+                    logger.error("Skipping file")
 
     def run(
         self,
