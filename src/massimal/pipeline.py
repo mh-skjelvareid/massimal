@@ -13,6 +13,13 @@ from datetime import datetime
 import json
 import pyproj
 
+import rasterio
+from rasterio.transform import Affine
+from rasterio.profiles import DefaultGTiffProfile
+from rasterio.crs import CRS
+import subprocess
+
+
 # Initialize logger
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -226,8 +233,20 @@ def closest_wl_index(wl_array: np.ndarray, target_wl: Union[float, int]):
     return np.argmin(abs(wl_array - target_wl))
 
 
-def rgb_subset_from_hsi(hyspec_im, hyspec_wl, rgb_target_wl=(650, 550, 450)):
-    """Extract 3 bands from hyperspectral image representing red, green, blue"""
+def rgb_subset_from_hsi(
+    hyspec_im, hyspec_wl, rgb_target_wl=(650, 550, 450)
+) -> tuple[np.ndarray, np.ndarray]:
+    """Extract 3 bands from hyperspectral image representing red, green, blue
+
+    Returns:
+    --------
+    rgb_im: np.ndarray
+        3-band image representing red, green and blue color (in that order)
+    rgb_wl: np.ndarray
+        3-element vector with wavelengths (in nm) corresponding to
+        each band of rgb_im.
+
+    """
     wl_ind = [closest_wl_index(hyspec_wl, wl) for wl in rgb_target_wl]
     rgb_im = hyspec_im[:, :, wl_ind]
     rgb_wl = hyspec_wl[wl_ind]
@@ -1300,7 +1319,7 @@ class ReflectanceConverter:
 
 class GlintCorrector:
 
-    def __init__(self, method="flat_spec",smooth_with_savitsky_golay=True):
+    def __init__(self, method="flat_spec", smooth_with_savitsky_golay=True):
         self.method = method
         self.smooth_with_savitsky_golay = smooth_with_savitsky_golay
 
@@ -1311,26 +1330,28 @@ class GlintCorrector:
         nir_ind = nir_ind & ~ignore_ind
         return nir_ind
 
-    def remove_glint_flat_spec(self, refl_image, refl_wl,**kwargs):
-        nir_ind = self.get_nir_ind(refl_wl,**kwargs)
+    def remove_glint_flat_spec(self, refl_image, refl_wl, **kwargs):
+        nir_ind = self.get_nir_ind(refl_wl, **kwargs)
         nir_im = np.mean(refl_image[:, :, nir_ind], axis=2, keepdims=True)
         refl_image_glint_corr = refl_image - nir_im
 
         if self.smooth_with_savitsky_golay:
-            refl_image_glint_corr = savitzky_golay_filter(refl_image_glint_corr,**kwargs)
+            refl_image_glint_corr = savitzky_golay_filter(
+                refl_image_glint_corr, **kwargs
+            )
 
         return refl_image_glint_corr
 
-    def glint_correct_image_file(self, image_path, glint_corr_image_path,**kwargs):
+    def glint_correct_image_file(self, image_path, glint_corr_image_path, **kwargs):
         if self.method == "flat_spec":
             image, wl, metadata = read_envi(image_path)
-            glint_corr_image = self.remove_glint_flat_spec(image, wl,**kwargs)
+            glint_corr_image = self.remove_glint_flat_spec(image, wl, **kwargs)
             save_envi(glint_corr_image_path, glint_corr_image, metadata)
         else:
-            raise ValueError(f'Glint correction method {self.method=} invalid.')
+            raise ValueError(f"Glint correction method {self.method=} invalid.")
 
 
-class ImageFlightSegment:
+class ImageFlightMetadata:
     """
 
     Attributes:
@@ -1358,11 +1379,19 @@ class ImageFlightSegment:
         altitude_offset=0.0,
         assume_square_pixels=True,
     ):
+        """
+
+        Arguments:
+        camera_opening_angle: float (degrees)
+            Full opening angle of camera, in degrees.
+            Corresponds to angle between rays hitting leftmost and
+            rightmost pixels of image.
+        """
 
         # Set input attributes
         self.imu_data = imu_data
         self.image_shape = image_shape[0:2]
-        self.camera_opening_angle = camera_opening_angle
+        self.camera_opening_angle = camera_opening_angle * (np.pi / 180)
         self.pitch_offset = pitch_offset
         self.roll_offset = roll_offset
         self.altitude_offset = altitude_offset
@@ -1406,13 +1435,14 @@ class ImageFlightSegment:
         return t_total, dt
 
     def _calc_alongtrack_properties(self):
-        vx_alongtrack = (self.utm_x[-1] - self.utm_y[0]) / self.t_total
-        vy_alongtrack = (self.utm_x[-1] - self.utm_y[0]) / self.t_total
+        vx_alongtrack = (self.utm_x[-1] - self.utm_x[0]) / self.t_total
+        vy_alongtrack = (self.utm_y[-1] - self.utm_y[0]) / self.t_total
         v_alongtrack = np.array((vx_alongtrack, vy_alongtrack))
-        u_alongtrack = v_alongtrack / np.linalg.norm(v_alongtrack)
+        v_alongtrack_abs = np.linalg.norm(v_alongtrack)
+        u_alongtrack = v_alongtrack / v_alongtrack_abs
 
-        swath_length = self.t_total * v_alongtrack
-        gsd_alongtrack = self.dt * np.linalg.norm(v_alongtrack)
+        swath_length = self.t_total * v_alongtrack_abs
+        gsd_alongtrack = self.dt * v_alongtrack_abs
 
         return v_alongtrack, u_alongtrack, gsd_alongtrack, swath_length
 
@@ -1429,7 +1459,7 @@ class ImageFlightSegment:
         """
         if assume_square_pixels:
             swath_width = self.gsd_alongtrack * self.image_shape[1]
-            altitude = (2 * swath_width) / np.tan(self.camera_opening_angle / 2)
+            altitude = swath_width / (2 * np.tan(self.camera_opening_angle / 2))
         else:
             altitude = np.mean(self.imu_data["altitude"])
         return altitude + self.altitude_offset
@@ -1451,7 +1481,7 @@ class ImageFlightSegment:
             self.mean_altitude * np.tan(self.roll_offset) * self.u_crosstrack
         )
 
-        camera_origin = np.array([self.x[0], self.y[0]])  # "Middle" of swath
+        camera_origin = np.array([self.utm_x[0], self.utm_y[0]])  # "Middle" of swath
         # NOTE: Cross-track elements in equation below are negative because
         # UTM coordinate system is right-handed and image coordinate system
         # is left-handed. If the camera_origin is in the middle of the
@@ -1489,6 +1519,93 @@ class ImageFlightSegment:
             raise ValueError(error_msg)
 
 
+class SimpleGeoreferencer:
+
+    def georeference_hyspec_save_geotiff(
+        self, image_path, imudata_path, geotiff_path, rgb_only=True, nodata_value=-9999
+    ):
+
+        image, wl, _ = read_envi(image_path)
+        if rgb_only:
+            image, wl = rgb_subset_from_hsi(image, wl)
+        self.insert_image_nodata_value(image, nodata_value)
+        image = self.move_bands_axis_first(image)
+        geotiff_profile = self.create_geotiff_profile(
+            image, imudata_path, nodata_value=nodata_value
+        )
+        self.write_geotiff(geotiff_path, image, wl, geotiff_profile)
+
+    @staticmethod
+    def move_bands_axis_first(image):
+        return np.moveaxis(image, 2, 0)
+
+    @staticmethod
+    def insert_image_nodata_value(image, nodata_value):
+        """Insert nodata values in image (in-place)
+
+        Arguments:
+        image:
+            3D image array ordered as (lines, samples, bands)
+
+        """
+        nodata_mask = np.all(image == 0, axis=2)
+        image[nodata_mask] = nodata_value
+
+    @staticmethod
+    def create_geotiff_profile(image, imudata_path, nodata_value=-9999):
+        """
+
+        Arguments:
+        image:
+            3D image array ordered as (bands,lines,samples).
+            Same as (bands, vertical dimension, horizontal dimension)
+
+        """
+        imu_data = ImuDataParser.read_imu_json_file(imudata_path)
+        image_flight_meta = ImageFlightMetadata(imu_data, image.shape)
+        transform = Affine(*image_flight_meta.get_image_transform())
+        crs_epsg = image_flight_meta.utm_epsg
+
+        profile = DefaultGTiffProfile()
+        profile.update(
+            height=image.shape[1],
+            width=image.shape[2],
+            count=image.shape[0],
+            dtype=str(image.dtype),
+            crs=CRS.from_epsg(crs_epsg),
+            transform=transform,
+            nodata=nodata_value,
+        )
+        return profile
+
+    @staticmethod
+    def write_geotiff(geotiff_path, image, wavelengths, geotiff_profile):
+        band_names = [f"{wl:.3f}" for wl in wavelengths]
+        with rasterio.Env():
+            with rasterio.open(geotiff_path, "w", **geotiff_profile) as dataset:
+                if band_names is not None:
+                    for i in range(dataset.count):
+                        dataset.set_band_description(i + 1, band_names[i])
+                dataset.write(image)
+
+    @staticmethod
+    def update_image_geotransform(image_path, new_geotransform: list[float]) -> None:
+        """Update affine geotransform for image using the rio command line tool
+
+        # Input parameters
+        image_path:
+            Path to image, will be modified in-place
+        new_geotransform:
+            6-parameter affine transform, list of floats, ordered (a,b,c,d,e,f)
+
+        See also https://rasterio.readthedocs.io/en/latest/api/rasterio.rio.edit_info.html
+        """
+        rio_cmd = (
+            f'rio edit-info --transform "{list(new_geotransform)}" {str(image_path)}'
+        )
+        subprocess.run(rio_cmd)
+
+
 class PipelineProcessor:
 
     def __init__(self, dataset_dir: Union[Path, str]):
@@ -1497,10 +1614,10 @@ class PipelineProcessor:
         self.raw_dir = dataset_dir / "0_raw"
         self.radiance_dir = dataset_dir / "1_radiance"
         self.reflectance_dir = dataset_dir / "2a_reflectance"
-        self.reflectance_gc_dir = dataset_dir / '2b_reflectance_gc'
+        self.reflectance_gc_dir = dataset_dir / "2b_reflectance_gc"
+        self.reflectance_gc_rgb_dir = dataset_dir / "2b_reflectance_gc" / "rgb_geotiff"
         self.calibration_dir = dataset_dir / "calibration"
         self.logs_dir = dataset_dir / "logs"
-
 
         if not self.raw_dir.exists():
             raise FileNotFoundError(f'Folder "0_raw" not found in {dataset_dir}')
@@ -1526,11 +1643,12 @@ class PipelineProcessor:
 
         # Create lists of processed file paths
         proc_file_paths = self._create_processed_file_paths()
-        self.rad_im_paths = proc_file_paths['radiance']
-        self.irrad_spec_paths = proc_file_paths['irradiance']
-        self.imu_data_paths = proc_file_paths['imudata']
-        self.refl_im_paths = proc_file_paths['reflectance']
-        self.refl_gc_im_paths = proc_file_paths['reflectance_gc']
+        self.rad_im_paths = proc_file_paths["radiance"]
+        self.irrad_spec_paths = proc_file_paths["irradiance"]
+        self.imu_data_paths = proc_file_paths["imudata"]
+        self.refl_im_paths = proc_file_paths["reflectance"]
+        self.refl_gc_im_paths = proc_file_paths["reflectance_gc"]
+        self.refl_gc_rgb_paths = proc_file_paths["reflectance_gc_rgb"]
 
         # Configure logging
         self._configure_file_logging()
@@ -1555,8 +1673,8 @@ class PipelineProcessor:
         logger.info("File logging initialized.")
 
     def _validate_raw_files(self):
-        """ Check that all expected raw files exist 
-        
+        """Check that all expected raw files exist
+
         Returns:
         --------
         times_paths, lcf_paths: list[Path]
@@ -1595,6 +1713,35 @@ class PipelineProcessor:
             for i in range(len(self.raw_image_paths))
         ]
         return base_file_names
+
+    def _create_processed_file_paths(self):
+        file_paths = {
+            "radiance": [],
+            "irradiance": [],
+            "imudata": [],
+            "reflectance": [],
+            "reflectance_gc": [],
+            "reflectance_gc_rgb": [],
+        }
+
+        for base_file_name in self.base_file_names:
+            rad_path = self.radiance_dir / (base_file_name + "_radiance.bip.hdr")
+            file_paths["radiance"].append(rad_path)
+            irs_path = self.radiance_dir / (base_file_name + "_irradiance.spec.hdr")
+            file_paths["irradiance"].append(irs_path)
+            imu_path = self.radiance_dir / (base_file_name + "_imudata.json")
+            file_paths["imudata"].append(imu_path)
+            refl_path = self.reflectance_dir / (base_file_name + "_reflectance.bip.hdr")
+            file_paths["reflectance"].append(refl_path)
+            rgc_path = self.reflectance_gc_dir / (
+                base_file_name + "_reflectance_gc.bip.hdr"
+            )
+            file_paths["reflectance_gc"].append(rgc_path)
+            rgc_rgb_path = self.reflectance_gc_rgb_dir / (
+                base_file_name + "_reflectance_gc_rgb.tiff"
+            )
+            file_paths["reflectance_gc_rgb"].append(rgc_rgb_path)
+        return file_paths
 
     def _get_raw_spectrum_paths(self):
         spec_paths = []
@@ -1638,29 +1785,6 @@ class PipelineProcessor:
                 f"More than one irradiance calibration file (*.dcp) found in {self.calibration_dir}"
             )
 
-    def _create_processed_file_paths(self):
-        file_paths = {'radiance':[],
-                    'irradiance':[],
-                    'imudata':[],
-                    'reflectance':[],
-                    'reflectance_gc':[]}
-
-        for base_file_name in self.base_file_names:
-            rad_path = self.radiance_dir / (base_file_name + "_radiance.bip.hdr")
-            file_paths['radiance'].append(rad_path)
-            irs_path = self.radiance_dir / (base_file_name + "_irradiance.spec.hdr")
-            file_paths['irradiance'].append(irs_path)
-            imu_path = self.radiance_dir / (base_file_name + "_imudata.json")
-            file_paths['imudata'].append(imu_path)
-            refl_path = self.reflectance_dir / (base_file_name + "_reflectance.bip.hdr")
-            file_paths['reflectance'].append(refl_path)
-            rgc_path = self.reflectance_gc_dir / (base_file_name + "_reflectance_gc.bip.hdr")
-            file_paths['reflectance_gc'].append(rgc_path)
-        return file_paths
-
-
-
-
     def convert_raw_images_to_radiance(self):
         logger.info("---- RADIANCE CONVERSION ----")
         self.radiance_dir.mkdir(exist_ok=True)
@@ -1679,7 +1803,6 @@ class PipelineProcessor:
                 )
                 logger.warning("Skipping file")
 
-
     def convert_raw_spectra_to_irradiance(self):
         logger.info("---- IRRADIANCE CONVERSION ----")
         self.radiance_dir.mkdir(exist_ok=True)
@@ -1688,7 +1811,9 @@ class PipelineProcessor:
             self.raw_spec_paths, self.irrad_spec_paths
         ):
             if raw_spec_path is not None:
-                logger.info(f"Converting {raw_spec_path.name} to downwelling irradiance")
+                logger.info(
+                    f"Converting {raw_spec_path.name} to downwelling irradiance"
+                )
                 try:
                     irradiance_converter.convert_raw_file_to_irradiance(
                         raw_spec_path, irrad_spec_path
@@ -1698,7 +1823,6 @@ class PipelineProcessor:
                         f"Error occured while processing {raw_spec_path}", exc_info=True
                     )
                     logger.error("Skipping file")
-
 
     def calibrate_irradiance_wavelengths(self):
         logger.info("---- IRRADIANCE WAVELENGTH CALIBRATION ----")
@@ -1727,10 +1851,14 @@ class PipelineProcessor:
         logger.info("---- IMU DATA PROCESSING ----")
         self.radiance_dir.mkdir(exist_ok=True)
         imu_data_parser = ImuDataParser()
-        for lcf_path, times_path, imu_data_path in zip(self.lcf_paths,self.times_paths,self.imu_data_paths):
+        for lcf_path, times_path, imu_data_path in zip(
+            self.lcf_paths, self.times_paths, self.imu_data_paths
+        ):
             logger.info(f"Processing IMU data from {lcf_path.name}")
             try:
-                imu_data_parser.read_and_save_imu_data(lcf_path,times_path,imu_data_path)
+                imu_data_parser.read_and_save_imu_data(
+                    lcf_path, times_path, imu_data_path
+                )
             except Exception as e:
                 logger.error(
                     f"Error occured while processing {lcf_path}", exc_info=True
@@ -1762,7 +1890,6 @@ class PipelineProcessor:
                     )
                     logger.error("Skipping file")
 
-
     def glint_correct_reflectance_images(self):
         logger.info("---- GLINT CORRECTION ----")
         self.reflectance_gc_dir.mkdir(exist_ok=True)
@@ -1771,18 +1898,15 @@ class PipelineProcessor:
         if all([not rp.exists() for rp in self.refl_im_paths]):
             warnings.warn(f"No reflectance images found in {self.reflectance_dir}")
 
-        for refl_path,refl_gc_path in zip(
-            self.refl_im_paths, self.refl_gc_im_paths
-        ):
+        for refl_path, refl_gc_path in zip(self.refl_im_paths, self.refl_gc_im_paths):
             if refl_path.exists():
                 logger.info(f"Applying glint correction to {refl_path.name}.")
                 try:
-                    glint_corrector.glint_correct_image_file(
-                        refl_path, refl_gc_path
-                    )
+                    glint_corrector.glint_correct_image_file(refl_path, refl_gc_path)
                 except Exception as e:
                     logger.error(
-                        f"Error occured while glint correcting {refl_path}", exc_info=True
+                        f"Error occured while glint correcting {refl_path}",
+                        exc_info=True,
                     )
                     logger.error("Skipping file")
 
