@@ -14,15 +14,14 @@ import json
 import pyproj
 
 # Initialize logger
-logger = logging.getLogger(__name__) 
+logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig(
-    format='%(asctime)s %(levelname)s: %(message)s',
-    datefmt='%H:%M:%S',
-    level = logging.INFO,
-    handlers=[logging.StreamHandler()]
+    format="%(asctime)s %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S",
+    level=logging.INFO,
+    handlers=[logging.StreamHandler()],
 )
-
 
 
 def read_envi(
@@ -76,12 +75,17 @@ def read_envi(
                 with open(header_path, "a") as file:
                     file.write("byte order = 0\n")
             except OSError:
-                logger.error(f"Error writing to header file {header_path}",exc_info=True)
-            
+                logger.error(
+                    f"Error writing to header file {header_path}", exc_info=True
+                )
+
             try:
                 im_handle = spectral.io.envi.open(header_path, image_path)
             except Exception as e:
-                logger.error(f"Unsucessful when reading modified header file {header_path}",exc_info=True)
+                logger.error(
+                    f"Unsucessful when reading modified header file {header_path}",
+                    exc_info=True,
+                )
                 return
             logger.info(f"Successfully read modified header file {header_path}")
 
@@ -96,6 +100,7 @@ def read_envi(
 
     # Returns
     return (image, wl, im_handle.metadata)
+
 
 def save_envi(
     header_path: Union[Path, str], image: np.ndarray, metadata: dict, **kwargs
@@ -130,18 +135,21 @@ def save_envi(
         header_path, image, metadata=metadata, force=True, ext=None, **kwargs
     )
 
-def wavelength_array_to_header_string(wavelengths:np.ndarray):
+
+def wavelength_array_to_header_string(wavelengths: np.ndarray):
     wl_str = [f"{wl:.3f}" for wl in wavelengths]  # Convert each number to string
     wl_str = "{" + ", ".join(wl_str) + "}"  # Join into single string
     return wl_str
 
-def update_header_wavelengths(wavelengths:np.ndarray, header_path:Union[Path,str]):
-    """ Update ENVI header wavelengths """
+
+def update_header_wavelengths(wavelengths: np.ndarray, header_path: Union[Path, str]):
+    """Update ENVI header wavelengths"""
     header_path = Path(header_path)
     header_dict = spectral.io.envi.read_envi_header(header_path)
     wl_str = wavelength_array_to_header_string(wavelengths)
     header_dict["wavelength"] = wl_str
     spectral.io.envi.write_envi_header(header_path, header_dict)
+
 
 def bin_image(
     image: np.ndarray,
@@ -203,24 +211,32 @@ def bin_image(
 
     return image
 
-def savitzky_golay_filter(image,window_length:int=13,polyorder:int=3,axis:int=2) -> np.ndarray:
-    """ Filter hyperspectral image using Savitzky-Golay filter with default arguments """
-    return savgol_filter(image,window_length=window_length,polyorder=polyorder,axis=axis)
 
-def closest_wl_index(wl_array:np.ndarray, target_wl:Union[float,int]):
+def savitzky_golay_filter(
+    image, window_length: int = 13, polyorder: int = 3, axis: int = 2
+) -> np.ndarray:
+    """Filter hyperspectral image using Savitzky-Golay filter with default arguments"""
+    return savgol_filter(
+        image, window_length=window_length, polyorder=polyorder, axis=axis
+    )
+
+
+def closest_wl_index(wl_array: np.ndarray, target_wl: Union[float, int]):
     """Get index in sampled wavelength array closest to target wavelength"""
     return np.argmin(abs(wl_array - target_wl))
 
-def rgb_subset_from_hsi(hyspec_im,hyspec_wl,rgb_target_wl=(650,550,450)):
-    """ Extract 3 bands from hyperspectral image representing red, green, blue """
-    wl_ind = [closest_wl_index(hyspec_wl,wl) for wl in rgb_target_wl]
-    rgb_im = hyspec_im[:,:,wl_ind]
+
+def rgb_subset_from_hsi(hyspec_im, hyspec_wl, rgb_target_wl=(650, 550, 450)):
+    """Extract 3 bands from hyperspectral image representing red, green, blue"""
+    wl_ind = [closest_wl_index(hyspec_wl, wl) for wl in rgb_target_wl]
+    rgb_im = hyspec_im[:, :, wl_ind]
     rgb_wl = hyspec_wl[wl_ind]
     return rgb_im, rgb_wl
 
-def convert_long_lat_to_utm(long,lat,return_utm_epsg=True):
-    """ Convert longitude and latitude coordinates (WGS84) to UTM 
-    
+
+def convert_long_lat_to_utm(long, lat, return_utm_epsg=True):
+    """Convert longitude and latitude coordinates (WGS84) to UTM
+
     # Input parameters:
     long:
         Longitude coordinate(s), scalar or array
@@ -236,11 +252,11 @@ def convert_long_lat_to_utm(long,lat,return_utm_epsg=True):
     UTMy:
         UTM y coordinate ("Northing"), scalar or array
     UTM_epsg (only if return_utm_epsg=True):
-        EPSG code (integer) for UTM zone    
+        EPSG code (integer) for UTM zone
     """
     utm_crs_list = pyproj.database.query_utm_crs_info(
         datum_name="WGS 84",
-        area_of_interest = pyproj.aoi.AreaOfInterest(
+        area_of_interest=pyproj.aoi.AreaOfInterest(
             west_lon_degree=min(long),
             south_lat_degree=min(lat),
             east_lon_degree=max(long),
@@ -249,11 +265,12 @@ def convert_long_lat_to_utm(long,lat,return_utm_epsg=True):
     )
     utm_crs = pyproj.CRS.from_epsg(utm_crs_list[0].code)
     proj = pyproj.Proj(utm_crs)
-    UTMx, UTMy = proj(long,lat)
+    UTMx, UTMy = proj(long, lat)
     if return_utm_epsg:
         return UTMx, UTMy, utm_crs.to_epsg()
     else:
         return UTMx, UTMy
+
 
 class RadianceCalibrationDataset:
     """A radiance calibration dataset for Resonon hyperspectral cameras.
@@ -329,18 +346,21 @@ class RadianceCalibrationDataset:
         """Unzip *.icp file (which is a zip file)"""
         if not unzip_into_nonempty_dir and any(list(self.calibration_dir.iterdir())):
             logger.info(f"Non-empty calibration directory {self.calibration_dir}")
-            logger.info('Assuming calibration file already unzipped.')
+            logger.info("Assuming calibration file already unzipped.")
             return
         try:
             with zipfile.ZipFile(self.calibration_file, mode="r") as zip_file:
                 for filename in zip_file.namelist():
                     zip_file.extract(filename, self.calibration_dir)
         except zipfile.BadZipFile:
-            logger.error(f"File {self.calibration_file} is not a valid ZIP file.",exc_info=True)
+            logger.error(
+                f"File {self.calibration_file} is not a valid ZIP file.", exc_info=True
+            )
         except Exception as e:
-            logger.error(f"Unexpected error when extracting calibration file {self.calibration_file}",
-                          exc_info=True)
-
+            logger.error(
+                f"Unexpected error when extracting calibration file {self.calibration_file}",
+                exc_info=True,
+            )
 
     def _get_dark_frames_gain_shutter(self) -> None:
         """Extract and save gain and shutter values for each dark frame"""
@@ -629,10 +649,10 @@ class RadianceConverter:
         --------
         radiance_image: np.ndarray (int16, microflicks)
             Radiance image with same shape as raw image, with spectral radiance
-            in units of microflicks = 10e-5 W/(m2*nm). Microflicks are used 
-            to be consistent with Resonon formatting, and because microflick 
-            values typically are in a range suitable for (memory-efficient) 
-            encoding as 16-bit unsigned integer. 
+            in units of microflicks = 10e-5 W/(m2*nm). Microflicks are used
+            to be consistent with Resonon formatting, and because microflick
+            values typically are in a range suitable for (memory-efficient)
+            encoding as 16-bit unsigned integer.
 
         Raises:
         -------
@@ -775,13 +795,14 @@ class IrradianceConverter:
                 for filename in zip_file.namelist():
                     zip_file.extract(filename, self.irrad_cal_dir)
         except zipfile.BadZipFile:
-            logger.error(f"File {self.irrad_cal_file} is not a valid ZIP file.",exc_info=True)
+            logger.error(
+                f"File {self.irrad_cal_file} is not a valid ZIP file.", exc_info=True
+            )
         except Exception as e:
             logger.error(
                 f"Error while extracting downwelling calibration file {self.irrad_cal_file}",
-                exc_info=True
+                exc_info=True,
             )
-
 
     def _load_cal_dark_and_sensitivity_spectra(self):
         """Load dark current and irradiance sensitivity spectra from cal. files"""
@@ -847,7 +868,7 @@ class IrradianceConverter:
         cal_irrad_spec = (raw_spec - self._cal_dark_spec) * scaled_conv_spec
 
         # Convert to standard spectral irradiance unit W/(m2*nm)
-        cal_irrad_spec = cal_irrad_spec*(np.pi/100_000)
+        cal_irrad_spec = cal_irrad_spec * (np.pi / 100_000)
 
         # Set spectrum outside wavelength limits to zero
         if set_irradiance_outside_wl_limits_to_zero:
@@ -864,7 +885,7 @@ class IrradianceConverter:
         """Read raw spectrum, convert to irradiance, and save"""
         raw_spec, _, spec_metadata = read_envi(raw_spec_path)
         irrad_spec = self.convert_raw_spectrum_to_irradiance(raw_spec, spec_metadata)
-        spec_metadata['unit'] = 'W/(m2*nm)'
+        spec_metadata["unit"] = "W/(m2*nm)"
         save_envi(irrad_spec_path, irrad_spec, spec_metadata)
 
 
@@ -877,7 +898,6 @@ class WavelengthCalibrator:
         self.reference_spectrum_path = None
         self.wl_cal = None
         self.max_wl_diff = None
-
 
         self.fraunhofer_wls = {
             "L": 382.04,
@@ -939,8 +959,7 @@ class WavelengthCalibrator:
         wl_poly_coeff = polynomial_fitted.coef
         return wl_cal, wl_poly_coeff
 
-
-    def _filter_fraunhofer_lines(self,line_indices, orig_wl, win_width_nm=20):
+    def _filter_fraunhofer_lines(self, line_indices, orig_wl, win_width_nm=20):
         """Calibrate wavelength values from known Fraunhofer absorption lines
 
         Arguments:
@@ -1002,8 +1021,8 @@ class WavelengthCalibrator:
         """
         spec = np.squeeze(spec)
         if spec.ndim > 1:
-            raise ValueError('Spectrum must be a 1D array')
-        
+            raise ValueError("Spectrum must be a 1D array")
+
         line_indices, _ = self.detect_absorption_lines(spec, wl_orig)
         fh_line_indices, fh_wavelengths = self._filter_fraunhofer_lines(
             line_indices, wl_orig
@@ -1020,7 +1039,7 @@ class WavelengthCalibrator:
         self._fh_wavelengths = fh_wavelengths
         self._wl_poly_coeff = wl_poly_coeff
         self.wl_cal = wl_cal
-        self.max_wl_diff = np.max(abs(wl_cal-wl_orig)) 
+        self.max_wl_diff = np.max(abs(wl_cal - wl_orig))
 
     def fit_batch(self, spectrum_header_paths: Iterable[Union[Path, str]]):
         """Calibrate wavelength based on spectrum with highest SNR (among many)
@@ -1040,7 +1059,7 @@ class WavelengthCalibrator:
             try:
                 spec, wl, _ = read_envi(spectrum_path)
             except OSError as error:
-                logger.warning(f"Error opening spectrum {spectrum_path}",exc_info=True)
+                logger.warning(f"Error opening spectrum {spectrum_path}", exc_info=True)
                 logger.warning("Skipping spectrum.")
             spectra.append(np.squeeze(spec))
 
@@ -1062,18 +1081,18 @@ class WavelengthCalibrator:
         """
         if self.wl_cal is None:
             raise AttributeError("Attribute wl_cal is not set - fit (calibrate) first.")
-        update_header_wavelengths(self.wl_cal,header_path)
+        update_header_wavelengths(self.wl_cal, header_path)
+
 
 class ImuDataParser:
     @staticmethod
-    
-    def read_lcf_file(lcf_file_path, time_rel_to_file_start = True):
-        """ Read location files (.lcf) generated by Resonon Airborne Hyperspectral imager 
-        
+    def read_lcf_file(lcf_file_path, time_rel_to_file_start=True):
+        """Read location files (.lcf) generated by Resonon Airborne Hyperspectral imager
+
         Arguments:
         ----------
         lcf_file_path:
-            Path to lcf file. Usually a "sidecar" file to an hyperspectral image 
+            Path to lcf file. Usually a "sidecar" file to an hyperspectral image
             with same "base" filename.
 
         Keyword arguments (optional):
@@ -1086,20 +1105,20 @@ class ImuDataParser:
         lcf_data:
             Dictionary with keys describing the type of data, and data
             formatted as numpy arrays. All arrays have equal length.
-            
+
             The 7 types of data:
             - 'time': System time in seconds, relative to some (unknown)
             starting point. Similar to "Unix time" (seconds since January 1. 1970),
-            but values indicate starting point around 1980. The values are 
+            but values indicate starting point around 1980. The values are
             usually offset to make the first timestamp equal to zero.
             See flag time_rel_to_file_start.
             - 'roll': Roll angle in radians, positive for "right wing up"
-            - 'pitch': Pitch angle in radians, positive nose up  
+            - 'pitch': Pitch angle in radians, positive nose up
             - 'yaw': (heading) in radians, zero at due North, PI/2 at due East
             - 'longitude': Longitude in decimal degrees, negative for west longitude
             - 'latitude': Latitude in decimal degrees, negative for southern hemisphere
             - 'altitude': Altitude in meters relative to the WGS-84 ellipsiod.
-            
+
         # Notes:
         - The LCF file format was shared by Casey Smith at Resonon on February 16. 2021.
         - The LCF specification was inherited from Space Computer Corp.
@@ -1107,22 +1126,30 @@ class ImuDataParser:
 
         # Load LCF data
         lcf_raw = np.loadtxt(lcf_file_path)
-        column_headers = ['time','roll','pitch','yaw','longitude','latitude','altitude']
-        lcf_data = {header:lcf_raw[:,i] for i,header in enumerate(column_headers)}
-        
+        column_headers = [
+            "time",
+            "roll",
+            "pitch",
+            "yaw",
+            "longitude",
+            "latitude",
+            "altitude",
+        ]
+        lcf_data = {header: lcf_raw[:, i] for i, header in enumerate(column_headers)}
+
         if time_rel_to_file_start:
-            lcf_data['time'] -= lcf_data['time'][0]
+            lcf_data["time"] -= lcf_data["time"][0]
 
         return lcf_data
 
     @staticmethod
-    def read_times_file(times_file_path,time_rel_to_file_start=True):
-        """ Read image line timestamps (.times) file generated by Resonon camera 
-        
+    def read_times_file(times_file_path, time_rel_to_file_start=True):
+        """Read image line timestamps (.times) file generated by Resonon camera
+
         Arguments:
         ----------
         times_file_path:
-            Path to times file. Usually a "sidecar" file to an hyperspectral image 
+            Path to times file. Usually a "sidecar" file to an hyperspectral image
             with same "base" filename.
         time_rel_to_file_start:
             Boolean indicating if times should be offset so that first
@@ -1131,15 +1158,15 @@ class ImuDataParser:
         # Returns:
         ----------
         times:
-            Numpy array containing timestamps for every line of the corresponding 
-            hyperspectral image. The timestamps are in units of seconds, and are 
-            relative to when the system started (values are usually within the 
+            Numpy array containing timestamps for every line of the corresponding
+            hyperspectral image. The timestamps are in units of seconds, and are
+            relative to when the system started (values are usually within the
             0-10000 second range). If time_rel_to_file_start=True, the times
             are offset so that the first timestamp is zero.
-            
-            The first timestamp of the times file and the  first timestamp of the 
-            corresponding lcf file (GPS/IMU data) are assumed to the 
-            recorded at exactly the same time. If both sets of timestamps are 
+
+            The first timestamp of the times file and the  first timestamp of the
+            corresponding lcf file (GPS/IMU data) are assumed to the
+            recorded at exactly the same time. If both sets of timestamps are
             offset so that time is measured relative to the start of the file,
             the times can be used to calculate interpolated GPS/IMU values
             for each image line.
@@ -1151,23 +1178,22 @@ class ImuDataParser:
         return image_times
 
     @staticmethod
-    def interpolate_lcf_to_times(lcf_data,image_times,convert_to_list=True):
-        """ Interpolate LCF data to image line times """
+    def interpolate_lcf_to_times(lcf_data, image_times, convert_to_list=True):
+        """Interpolate LCF data to image line times"""
         lcf_data_interp = {}
-        lcf_times = lcf_data['time']
-        for lcf_key,lcf_value in lcf_data.items():
-            lcf_data_interp[lcf_key] = np.interp(image_times,lcf_times,lcf_value)
+        lcf_times = lcf_data["time"]
+        for lcf_key, lcf_value in lcf_data.items():
+            lcf_data_interp[lcf_key] = np.interp(image_times, lcf_times, lcf_value)
             if convert_to_list:
                 lcf_data_interp[lcf_key] = lcf_data_interp[lcf_key].tolist()
         return lcf_data_interp
 
-    
-    def read_and_save_imu_data(self,lcf_path,times_path,json_path):
+    def read_and_save_imu_data(self, lcf_path, times_path, json_path):
         lcf_data = self.read_lcf_file(lcf_path)
         times_data = self.read_times_file(times_path)
-        lcf_data_interp = self.interpolate_lcf_to_times(lcf_data,times_data)
+        lcf_data_interp = self.interpolate_lcf_to_times(lcf_data, times_data)
 
-        with open(json_path, "w", encoding='utf-8') as write_file:
+        with open(json_path, "w", encoding="utf-8") as write_file:
             json.dump(lcf_data_interp, write_file, ensure_ascii=False, indent=4)
 
     @staticmethod
@@ -1211,10 +1237,10 @@ class ReflectanceConverter:
         irrad_wl: np.ndarray,
         convolve_irradiance_with_gaussian: bool = True,
         gauss_fwhm: float = 3.5,  # TODO: Find "optimal" default value for Pika-L
-        smooth_with_savitsky_golay = False,
+        smooth_with_savitsky_golay=False,
     ):
-        """Convert radiance image to reflectance using downwelling spectrum 
-        
+        """Convert radiance image to reflectance using downwelling spectrum
+
         Arguments:
         ----------
 
@@ -1223,7 +1249,7 @@ class ReflectanceConverter:
 
         irrad_spec:
             Spectral irradiance in units of W/(m2*nm)
-        
+
         """
 
         # Check that spectrum is 1D, then expand to 3D for broadcasting
@@ -1236,14 +1262,16 @@ class ReflectanceConverter:
         rad_image = rad_image[:, :, valid_image_wl_ind]
 
         # Make irradiance spectrum compatible with image
-        irrad_spec = irrad_spec*100_000 # Convert from W/(m2*nm) to uW/(cm2*um)
+        irrad_spec = irrad_spec * 100_000  # Convert from W/(m2*nm) to uW/(cm2*um)
         if convolve_irradiance_with_gaussian:
             irrad_spec = self.conv_spec_with_gaussian(irrad_spec, irrad_wl, gauss_fwhm)
         irrad_spec = self.interpolate_irrad_to_image_wl(irrad_spec, irrad_wl, rad_wl)
         irrad_spec = np.expand_dims(irrad_spec, axis=(0, 1))
 
         # Convert to reflectance, assuming Lambertian (perfectly diffuse) surface
-        refl_image = np.pi * (rad_image.astype(np.float32) / irrad_spec.astype(np.float32))
+        refl_image = np.pi * (
+            rad_image.astype(np.float32) / irrad_spec.astype(np.float32)
+        )
         refl_wl = rad_wl
 
         # Spectral smoothing (optional)
@@ -1261,59 +1289,68 @@ class ReflectanceConverter:
     ):
         rad_image, rad_wl, rad_meta = read_envi(radiance_image_header)
         irrad_spec, irrad_wl, _ = read_envi(irradiance_header)
-        refl_im, refl_wl, _ = self.convert_radiance_image_to_reflectance(rad_image,rad_wl,irrad_spec,irrad_wl)
+        refl_im, refl_wl, _ = self.convert_radiance_image_to_reflectance(
+            rad_image, rad_wl, irrad_spec, irrad_wl
+        )
         wl_str = wavelength_array_to_header_string(refl_wl)
         refl_meta = rad_meta
-        refl_meta['wavelength'] = wl_str
-        save_envi(reflectance_image_header,refl_im,refl_meta)
+        refl_meta["wavelength"] = wl_str
+        save_envi(reflectance_image_header, refl_im, refl_meta)
 
 
 class GlintCorrector:
 
-    def __init__(self,method='flat_spec'):
+    def __init__(self, method="flat_spec"):
         self.method = method
 
     @staticmethod
-    def get_nir_ind(wl,nir_band=(740,805),nir_ignore_band=(753,773)):
-        nir_ind = (wl>=nir_band[0]) & (wl<=nir_band[1])
-        ignore_ind = (wl>=nir_ignore_band[0]) & (wl<=nir_ignore_band[1])
+    def get_nir_ind(wl, nir_band=(740, 805), nir_ignore_band=(753, 773)):
+        nir_ind = (wl >= nir_band[0]) & (wl <= nir_band[1])
+        ignore_ind = (wl >= nir_ignore_band[0]) & (wl <= nir_ignore_band[1])
         nir_ind = nir_ind & ~ignore_ind
         return nir_ind
 
-    def remove_glint_flat_spec(self,refl_image,refl_wl):
+    def remove_glint_flat_spec(self, refl_image, refl_wl):
         nir_ind = self.get_nir_ind(refl_wl)
-        nir_im = np.mean(refl_image[:,:,nir_ind],axis=2,keepdims=True)
+        nir_im = np.mean(refl_image[:, :, nir_ind], axis=2, keepdims=True)
         refl_image_glint_corr = refl_image - nir_im
         return refl_image_glint_corr
 
-    def process_image_file(self,image_path,
-                           glint_corr_image_path):
+    def process_image_file(self, image_path, glint_corr_image_path):
         image, wl, metadata = read_envi(image_path)
         glint_corr_image = self.remove_glint_flat_spec(image, wl)
-        save_envi(glint_corr_image_path,glint_corr_image,metadata)
-        
+        save_envi(glint_corr_image_path, glint_corr_image, metadata)
+
 
 class ImageFlightSegment:
     """
-    
+
     Attributes:
     -----------
-    u_alongtrack: 
+    u_alongtrack:
         Unit vector (easting, northing) pointing along flight direction
     u_crosstrack:
         Unit vector (easting, northing) pointing left relative to
         flight direction. The direction is chosen to match that of
         the image coordinate system: Origin in upper left corner,
         down (increasing line number) corresponds to positive along-track
-        direction, right (increasing sample number) corresponds to 
-        positive cross-track direction. 
+        direction, right (increasing sample number) corresponds to
+        positive cross-track direction.
 
 
     """
 
-    def __init__(self,imu_data,image_shape,camera_opening_angle=36.5,pitch_offset=0.0,roll_offset=0.0,
-                 altitude_offset = 0.0,assume_square_pixels=True):
-        
+    def __init__(
+        self,
+        imu_data,
+        image_shape,
+        camera_opening_angle=36.5,
+        pitch_offset=0.0,
+        roll_offset=0.0,
+        altitude_offset=0.0,
+        assume_square_pixels=True,
+    ):
+
         # Set input attributes
         self.imu_data = imu_data
         self.image_shape = image_shape[0:2]
@@ -1323,16 +1360,16 @@ class ImageFlightSegment:
         self.altitude_offset = altitude_offset
 
         # Get UTM coordinates and CRS code
-        utm_x,utm_y,utm_epsg = convert_long_lat_to_utm(imu_data['longitude'],
-                                               imu_data['latitude'],
-                                               return_utm_epsg=True)
+        utm_x, utm_y, utm_epsg = convert_long_lat_to_utm(
+            imu_data["longitude"], imu_data["latitude"], return_utm_epsg=True
+        )
         self.utm_x = utm_x
         self.utm_y = utm_y
         self.utm_epsg = utm_epsg
-        
+
         # Time-related attributes
         t_total, dt = self._calc_time_attributes()
-        t = imu_data['time']
+        t = imu_data["time"]
         self.dt = np.mean(np.diff(t))
         self.t_total = t[-1] - t[0]
 
@@ -1342,7 +1379,7 @@ class ImageFlightSegment:
         self.u_alongtrack = u_at
         self.gsd_alongtrack = gsd_at
         self.swath_length = sl
-        
+
         # Altitude
         self.mean_altitude = self._calc_mean_altitude(assume_square_pixels)
 
@@ -1355,106 +1392,95 @@ class ImageFlightSegment:
         # Image origin (image transform offset)
         self.image_origin = self._calc_image_origin()
 
-
     def _calc_time_attributes(self):
-        t = np.array(self.imu_data['time'])
+        t = np.array(self.imu_data["time"])
         dt = np.mean(np.diff(t))
-        t_total = len(t)*dt
+        t_total = len(t) * dt
         return t_total, dt
-    
+
     def _calc_alongtrack_properties(self):
         vx_alongtrack = (self.x[-1] - self.x[0]) / self.t_total
         vy_alongtrack = (self.y[-1] - self.y[0]) / self.t_total
-        v_alongtrack = np.array((vx_alongtrack,vy_alongtrack))
+        v_alongtrack = np.array((vx_alongtrack, vy_alongtrack))
         u_alongtrack = v_alongtrack / np.linalg.norm(v_alongtrack)
-        
-        swath_length = self.t_total*self.v_alongtrack
-        gsd_alongtrack = self.dt*np.linalg.norm(v_alongtrack)
+
+        swath_length = self.t_total * self.v_alongtrack
+        gsd_alongtrack = self.dt * np.linalg.norm(v_alongtrack)
 
         return v_alongtrack, u_alongtrack, gsd_alongtrack, swath_length
-    
-    def _calc_mean_altitude(self,assume_square_pixels):
-        """ Calculate mean altitude of uav during imaging
-        
+
+    def _calc_mean_altitude(self, assume_square_pixels):
+        """Calculate mean altitude of uav during imaging
+
         Arguments:
         assume_square_pixels: bool
             If true, the across-track sampling distance is assumed to
-            be equal to the alongtrack sampling distance. The altitude 
+            be equal to the alongtrack sampling distance. The altitude
             is calculated based on this and the number of cross-track samples.
-            If false, the mean of the altitude values from the imu data 
+            If false, the mean of the altitude values from the imu data
             is used. In both cases, the altitude offset is added.
         """
         if assume_square_pixels:
-            swath_width = self.gsd_alongtrack*self.image_shape[1]
-            altitude = (2*swath_width)/np.tan(self.camera_opening_angle/2)
+            swath_width = self.gsd_alongtrack * self.image_shape[1]
+            altitude = (2 * swath_width) / np.tan(self.camera_opening_angle / 2)
         else:
-            altitude = np.mean(self.imu_data['altitude']) 
+            altitude = np.mean(self.imu_data["altitude"])
         return altitude + self.altitude_offset
 
-
     def _calc_crosstrack_properties(self):
-        u_crosstrack = np.array([-self.u_alongtrack[1],self.u_alongtrack[0]]) # Rotate 90 CCW
-        swath_width = 2*self.mean_altitude*np.tan(self.camera_opening_angle/2)
-        gsd_crosstrack = swath_width/self.image_shape[1]
+        u_crosstrack = np.array(
+            [-self.u_alongtrack[1], self.u_alongtrack[0]]
+        )  # Rotate 90 CCW
+        swath_width = 2 * self.mean_altitude * np.tan(self.camera_opening_angle / 2)
+        gsd_crosstrack = swath_width / self.image_shape[1]
         return u_crosstrack, swath_width, gsd_crosstrack
-    
+
     def _calc_image_origin(self):
 
-        alongtrack_offset = self.mean_altitude*np.tan(self.pitch_offset)*self.u_alongtrack
-        crosstrack_offset = self.mean_altitude*np.tan(self.roll_offset)*self.u_crosstrack
+        alongtrack_offset = (
+            self.mean_altitude * np.tan(self.pitch_offset) * self.u_alongtrack
+        )
+        crosstrack_offset = (
+            self.mean_altitude * np.tan(self.roll_offset) * self.u_crosstrack
+        )
 
-        camera_origin = np.array([self.x[0], self.y[0]]) # "Middle" of swath
+        camera_origin = np.array([self.x[0], self.y[0]])  # "Middle" of swath
         # NOTE: Cross-track elements in equation below are negative because
         # UTM coordinate system is right-handed and image coordinate system
-        # is left-handed. If the camera_origin is in the middle of the 
-        # top line of the image, u_crosstrack points away from the image 
+        # is left-handed. If the camera_origin is in the middle of the
+        # top line of the image, u_crosstrack points away from the image
         # origin (line 0, sample 0).
-        image_origin = (camera_origin
-                        - 0.5*self.swath_width*self.u_crosstrack # Edge of swath
-                        - crosstrack_offset
-                        + alongtrack_offset)
+        image_origin = (
+            camera_origin
+            - 0.5 * self.swath_width * self.u_crosstrack  # Edge of swath
+            - crosstrack_offset
+            + alongtrack_offset
+        )
         return image_origin
 
-    def get_image_transform(self,ordering='alphabetical'):
-        """ Get 6-element affine transform for image
-        
-        Keyword arguments: 
+    def get_image_transform(self, ordering="alphabetical"):
+        """Get 6-element affine transform for image
+
+        Keyword arguments:
         ------------------
         ordering: ['alphabetical','worldfile']
             If 'alphabetical', return A,B,C,D,E,F
             If 'worldfile', return A,D,B,E,C,F
-            See https://en.wikipedia.org/wiki/World_file 
+            See https://en.wikipedia.org/wiki/World_file
         """
-        A,D = self.gsd_crosstrack*self.u_crosstrack
-        B,E = self.gsd_alongtrack*self.u_alongtrack
-        C,F = self.image_origin
+        A, D = self.gsd_crosstrack * self.u_crosstrack
+        B, E = self.gsd_alongtrack * self.u_alongtrack
+        C, F = self.image_origin
 
-        if ordering == 'alphabetical':
-            return A,B,C,D,E,F
-        elif ordering == 'worldfile':
-            return A,D,B,E,C,F
+        if ordering == "alphabetical":
+            return A, B, C, D, E, F
+        elif ordering == "worldfile":
+            return A, D, B, E, C, F
         else:
-            error_msg = f'Invalid ordering argument {ordering}'
+            error_msg = f"Invalid ordering argument {ordering}"
             logger.error(error_msg)
             raise ValueError(error_msg)
 
-
-    # C,F = r_origin
-
-    # # Calculate B (x-skew) and E (y-scale)
-    # image_dt = 1/framerate    # Image line sampling period
-    # B = vx_alongtrack*image_dt
-    # E = vy_alongtrack*image_dt
-
-    # # Calculate A (x-scale) and D (y-skew)
-    # cross_track_gsd = L/n_crosstrack_pixels  # Distance between pixels cross-track
-    # A,D = cross_track_gsd * u_crosstrack
-
-    # # Return
-    # if use_world_file_ordering:
-    #     return (A,D,B,E,C,F), utm_epsg
-    # else:
-    #     return (A,B,C,D,E,F), utm_epsg
 
 """
 
@@ -1504,33 +1530,31 @@ class ImageFlightSegment:
 """
 
 
-
-
 class PipelineProcessor:
 
-    def __init__(self,dataset_dir:Union[Path,str]):
+    def __init__(self, dataset_dir: Union[Path, str]):
         self.dataset_dir = Path(dataset_dir)
         self.dataset_base_name = dataset_dir.name
-        self.raw_dir = dataset_dir / '0_raw'
-        self.radiance_dir = dataset_dir / '1_radiance'
-        self.reflectance_dir = dataset_dir / '2a_reflectance'
+        self.raw_dir = dataset_dir / "0_raw"
+        self.radiance_dir = dataset_dir / "1_radiance"
+        self.reflectance_dir = dataset_dir / "2a_reflectance"
         # self.wl_reflectance_dir = dataset_dir / '2b_reflectance_gc'
-        self.calibration_dir = dataset_dir / 'calibration'
-        self.logs_dir = dataset_dir / 'logs'
+        self.calibration_dir = dataset_dir / "calibration"
+        self.logs_dir = dataset_dir / "logs"
 
         if not self.raw_dir.exists():
             raise FileNotFoundError(f'Folder "0_raw" not found in {dataset_dir}')
         if not self.calibration_dir.exists():
             raise FileNotFoundError(f'Folder "calibration" not found in {dataset_dir}')
-        
+
         # Search for ENVI image header files, sort and validate
-        self.raw_image_paths = list(self.raw_dir.rglob('*.bil.hdr'))
-        self.raw_image_paths = sorted(self.raw_image_paths,key=self.get_image_number)
+        self.raw_image_paths = list(self.raw_dir.rglob("*.bil.hdr"))
+        self.raw_image_paths = sorted(self.raw_image_paths, key=self.get_image_number)
         self._validate_raw_files()
 
         # Search for irradiance spectrum files
         self.raw_spec_paths = self._get_raw_spectrum_paths()
-        
+
         # Create "base" file names numbered from 0
         self.base_file_names = self._create_base_file_names()
 
@@ -1539,7 +1563,7 @@ class PipelineProcessor:
         self.irradiance_spec_paths = self._get_irradiance_spec_paths()
         self.reflectance_image_paths = self._get_reflectance_image_paths()
         # self.gc_reflectance_image_paths = self._get_gc_reflectance_image_paths()
-        
+
         # Get calibration file paths
         self.radiance_calibration_file = self._get_radiance_calibration_path()
         self.irradiance_calibration_file = self._get_irradiance_calibration_path()
@@ -1548,199 +1572,247 @@ class PipelineProcessor:
         self._configure_file_logging()
 
     def _configure_file_logging(self):
-        """ Configure logging for pipeline """
+        """Configure logging for pipeline"""
 
         # Create log file path
         self.logs_dir.mkdir(exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        log_file_name = f'{timestamp}_{self.dataset_base_name}.log'
+        log_file_name = f"{timestamp}_{self.dataset_base_name}.log"
         log_path = self.logs_dir / log_file_name
 
         # Add file handler to module-level logger
         file_handler = logging.FileHandler(log_path)
         formatter = logging.Formatter(
-            fmt = '%(asctime)s %(levelname)s: %(message)s',
-            datefmt = '%H:%M:%S'
+            fmt="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S"
         )
         file_handler.setFormatter(formatter)
         file_handler.setLevel(logging.INFO)
         logger.addHandler(file_handler)
-        logger.info('File logging initialized.')
-
+        logger.info("File logging initialized.")
 
     def _validate_raw_files(self):
-        for raw_image_path in list(self.raw_image_paths): # Use list() to copy
-            file_base_name = raw_image_path.name.split('.')[0]
-            binary_im_path = raw_image_path.parent / (file_base_name + '.bil')
-            times_path =  raw_image_path.parent / (file_base_name + '.bil.times')
-            lcf_path = raw_image_path.parent / (file_base_name + '.lcf')
-            if (not(binary_im_path.exists()) or not(times_path.exists()) or not(lcf_path.exists())):
-                warnings.warn(f'Set of raw files for image {raw_image_path} is not complete')
+        for raw_image_path in list(self.raw_image_paths):  # Use list() to copy
+            file_base_name = raw_image_path.name.split(".")[0]
+            binary_im_path = raw_image_path.parent / (file_base_name + ".bil")
+            times_path = raw_image_path.parent / (file_base_name + ".bil.times")
+            lcf_path = raw_image_path.parent / (file_base_name + ".lcf")
+            if (
+                not (binary_im_path.exists())
+                or not (times_path.exists())
+                or not (lcf_path.exists())
+            ):
+                warnings.warn(
+                    f"Set of raw files for image {raw_image_path} is not complete"
+                )
                 self.raw_image_paths.remove(raw_image_path)
 
     @staticmethod
     def get_image_number(raw_image_path):
-        image_file_stem = raw_image_path.name.split('.')[0]
-        image_number = image_file_stem.split('_')[-1]
+        image_file_stem = raw_image_path.name.split(".")[0]
+        image_number = image_file_stem.split("_")[-1]
         return int(image_number)
-            
+
     def _create_base_file_names(self):
-        base_file_names = [f'{self.dataset_base_name}_{i:03d}' 
-                           for i in range(len(self.raw_image_paths))]
+        base_file_names = [
+            f"{self.dataset_base_name}_{i:03d}"
+            for i in range(len(self.raw_image_paths))
+        ]
         return base_file_names
-    
+
     def _get_raw_spectrum_paths(self):
         spec_paths = []
         for raw_image_path in self.raw_image_paths:
-            spec_base_name = raw_image_path.name.split('_')[0]
+            spec_base_name = raw_image_path.name.split("_")[0]
             image_number = self.get_image_number(raw_image_path)
-            spec_binary = raw_image_path.parent / f'{spec_base_name}_downwelling_{image_number}_pre.spec'
-            spec_header = raw_image_path.parent / (spec_binary.name + '.hdr')
-            if (spec_binary.exists() and spec_header.exists()):
+            spec_binary = (
+                raw_image_path.parent
+                / f"{spec_base_name}_downwelling_{image_number}_pre.spec"
+            )
+            spec_header = raw_image_path.parent / (spec_binary.name + ".hdr")
+            if spec_binary.exists() and spec_header.exists():
                 spec_paths.append(spec_header)
             else:
                 spec_paths.append(None)
         return spec_paths
-    
+
     def _get_radiance_calibration_path(self):
-        icp_files = list(self.calibration_dir.glob('*.icp'))
+        icp_files = list(self.calibration_dir.glob("*.icp"))
         if len(icp_files) == 1:
             return icp_files[0]
         elif len(icp_files) == 0:
-            raise FileNotFoundError(f'No radiance calibration file (*.icp) found in {self.calibration_dir}')
+            raise FileNotFoundError(
+                f"No radiance calibration file (*.icp) found in {self.calibration_dir}"
+            )
         else:
-            raise ValueError(f'More than one radiance calibration file (*.icp) found in {self.calibration_dir}')
+            raise ValueError(
+                f"More than one radiance calibration file (*.icp) found in {self.calibration_dir}"
+            )
 
     def _get_irradiance_calibration_path(self):
-        dcp_files = list(self.calibration_dir.glob('*.dcp'))
+        dcp_files = list(self.calibration_dir.glob("*.dcp"))
         if len(dcp_files) == 1:
             return dcp_files[0]
         elif len(dcp_files) == 0:
-            raise FileNotFoundError(f'No irradiance calibration file (*.dcp) found in {self.calibration_dir}')
+            raise FileNotFoundError(
+                f"No irradiance calibration file (*.dcp) found in {self.calibration_dir}"
+            )
         else:
-            raise ValueError(f'More than one irradiance calibration file (*.dcp) found in {self.calibration_dir}')
-        
+            raise ValueError(
+                f"More than one irradiance calibration file (*.dcp) found in {self.calibration_dir}"
+            )
+
     def _get_radiance_image_paths(self):
         rad_image_paths = []
         for base_file_name in self.base_file_names:
-            rad_im_path = self.radiance_dir / (base_file_name + '_radiance.bip.hdr')
+            rad_im_path = self.radiance_dir / (base_file_name + "_radiance.bip.hdr")
             rad_image_paths.append(rad_im_path if rad_im_path.exists() else None)
         return rad_image_paths
-
 
     def _get_reflectance_image_paths(self):
         refl_image_paths = []
         for base_file_name in self.base_file_names:
-            refl_im_path = self.reflectance_dir / (base_file_name + '_reflectance.bip.hdr')
+            refl_im_path = self.reflectance_dir / (
+                base_file_name + "_reflectance.bip.hdr"
+            )
             refl_image_paths.append(refl_im_path if refl_im_path.exists() else None)
         return refl_image_paths
-    
+
     def _get_irradiance_spec_paths(self):
         irrad_spec_paths = []
         for base_file_name in self.base_file_names:
-            irs_path = self.radiance_dir / (base_file_name + '_irradiance.spec.hdr')
+            irs_path = self.radiance_dir / (base_file_name + "_irradiance.spec.hdr")
             irrad_spec_paths.append(irs_path if irs_path.exists() else None)
         return irrad_spec_paths
 
     def convert_raw_images_to_radiance(self):
-        logger.info('---- RADIANCE CONVERSION ----')
+        logger.info("---- RADIANCE CONVERSION ----")
         self.radiance_dir.mkdir(exist_ok=True)
         radiance_converter = RadianceConverter(self.radiance_calibration_file)
-        for raw_image_path, base_file_name in zip(self.raw_image_paths,self.base_file_names):
-            logger.info(f'Converting {base_file_name} to radiance')
-            radiance_file_name = f'{base_file_name}_radiance.bip.hdr'
+        for raw_image_path, base_file_name in zip(
+            self.raw_image_paths, self.base_file_names
+        ):
+            logger.info(f"Converting {base_file_name} to radiance")
+            radiance_file_name = f"{base_file_name}_radiance.bip.hdr"
             radiance_image_path = self.radiance_dir / radiance_file_name
             try:
-                radiance_converter.convert_raw_file_to_radiance(raw_image_path,radiance_image_path)
+                radiance_converter.convert_raw_file_to_radiance(
+                    raw_image_path, radiance_image_path
+                )
             except Exception as e:
-                logger.warning(f'Error occured while processing {raw_image_path}',exc_info=True)
-                logger.warning('Skipping file')
+                logger.warning(
+                    f"Error occured while processing {raw_image_path}", exc_info=True
+                )
+                logger.warning("Skipping file")
         self.radiance_image_paths = self._get_radiance_image_paths()
 
-
     def convert_raw_spectra_to_irradiance(self):
-        logger.info('---- IRRADIANCE CONVERSION ----')
+        logger.info("---- IRRADIANCE CONVERSION ----")
         self.radiance_dir.mkdir(exist_ok=True)
         irradiance_converter = IrradianceConverter(self.irradiance_calibration_file)
-        for raw_spec_path, base_file_name in zip(self.raw_spec_paths,self.base_file_names):
+        for raw_spec_path, base_file_name in zip(
+            self.raw_spec_paths, self.base_file_names
+        ):
             if raw_spec_path is not None:
-                logger.info(f'Converting {base_file_name} to downwelling irradiance')
-                irradiance_file_name = f'{base_file_name}_irradiance.spec.hdr'
+                logger.info(f"Converting {base_file_name} to downwelling irradiance")
+                irradiance_file_name = f"{base_file_name}_irradiance.spec.hdr"
                 irradiance_spec_path = self.radiance_dir / irradiance_file_name
                 try:
-                    irradiance_converter.convert_raw_file_to_irradiance(raw_spec_path,irradiance_spec_path)
+                    irradiance_converter.convert_raw_file_to_irradiance(
+                        raw_spec_path, irradiance_spec_path
+                    )
                 except Exception as e:
-                    logger.error(f'Error occured while processing {raw_spec_path}',exc_info=True)
-                    logger.error('Skipping file')
+                    logger.error(
+                        f"Error occured while processing {raw_spec_path}", exc_info=True
+                    )
+                    logger.error("Skipping file")
         self.irradiance_spec_paths = self._get_irradiance_spec_paths()
 
-
     def calibrate_irradiance_wavelengths(self):
-        logger.info('---- IRRADIANCE WAVELENGTH CALIBRATION ----')
-        if not(self.radiance_dir.exists()):
-            raise FileNotFoundError('Radiance folder with irradiance spectra does not exist')
+        logger.info("---- IRRADIANCE WAVELENGTH CALIBRATION ----")
+        if not (self.radiance_dir.exists()):
+            raise FileNotFoundError(
+                "Radiance folder with irradiance spectra does not exist"
+            )
         wavelength_calibrator = WavelengthCalibrator()
-        irradiance_spec_paths = list(self.radiance_dir.glob('*.spec.hdr'))
+        irradiance_spec_paths = list(self.radiance_dir.glob("*.spec.hdr"))
         if irradiance_spec_paths:
             wavelength_calibrator.fit_batch(irradiance_spec_paths)
             for irradiance_spec_path in irradiance_spec_paths:
-                logger.info(f'Calibrating wavelengths for {irradiance_spec_path.name}')
+                logger.info(f"Calibrating wavelengths for {irradiance_spec_path.name}")
                 try:
-                    wavelength_calibrator.update_header_wavelengths(irradiance_spec_path)
+                    wavelength_calibrator.update_header_wavelengths(
+                        irradiance_spec_path
+                    )
                 except Exception as e:
-                    logger.error(f'Error occured while processing {irradiance_spec_path}',exc_info=True)
-                    logger.error('Skipping file')
-
+                    logger.error(
+                        f"Error occured while processing {irradiance_spec_path}",
+                        exc_info=True,
+                    )
+                    logger.error("Skipping file")
 
     def convert_radiance_images_to_reflectance(self):
-        logger.info('---- REFLECTANCE CONVERSION ----')
+        logger.info("---- REFLECTANCE CONVERSION ----")
         self.reflectance_dir.mkdir(exist_ok=True)
         reflectance_converter = ReflectanceConverter()
         radiance_image_paths = self._get_radiance_image_paths()
         irradiance_spec_paths = self._get_irradiance_spec_paths()
 
         if all([rp is None for rp in radiance_image_paths]):
-            warnings.warn(f'No radiance images found in {self.radiance_dir}')
+            warnings.warn(f"No radiance images found in {self.radiance_dir}")
         if all([irp is None for irp in irradiance_spec_paths]):
-            warnings.warn(f'No irradiance spectra found in {self.radiance_dir}')
-        
+            warnings.warn(f"No irradiance spectra found in {self.radiance_dir}")
+
         for rad_path, irrad_path, base_file_name in zip(
-            radiance_image_paths,irradiance_spec_paths,self.base_file_names):
+            radiance_image_paths, irradiance_spec_paths, self.base_file_names
+        ):
             if (rad_path is not None) and (irrad_path is not None):
-                logger.info(f'Converting {rad_path.name} to reflectance.')
-                refl_path = self.reflectance_dir / (base_file_name + '_reflectance.bip.hdr')
+                logger.info(f"Converting {rad_path.name} to reflectance.")
+                refl_path = self.reflectance_dir / (
+                    base_file_name + "_reflectance.bip.hdr"
+                )
                 try:
                     reflectance_converter.convert_radiance_file_to_reflectance(
                         rad_path, irrad_path, refl_path
                     )
                 except Exception as e:
-                    logger.error(f'Error occured while processing {rad_path}',exc_info=True)
-                    logger.error('Skipping file')
+                    logger.error(
+                        f"Error occured while processing {rad_path}", exc_info=True
+                    )
+                    logger.error("Skipping file")
         self.reflectance_image_paths = self._get_reflectance_image_paths()
 
-
-    def run(self,
-            convert_raw_images_to_radiance = True,
-            convert_raw_spectra_to_irradiance = True,
-            calibrate_irradiance_wavelengths = True,
-            convert_radiance_to_reflectance = True):
+    def run(
+        self,
+        convert_raw_images_to_radiance=True,
+        convert_raw_spectra_to_irradiance=True,
+        calibrate_irradiance_wavelengths=True,
+        convert_radiance_to_reflectance=True,
+    ):
         if convert_raw_images_to_radiance:
             try:
                 self.convert_raw_images_to_radiance()
             except Exception as e:
-                logger.error('Error while converting raw images to radiance', exc_info=True)
+                logger.error(
+                    "Error while converting raw images to radiance", exc_info=True
+                )
         if convert_raw_spectra_to_irradiance:
             try:
                 self.convert_raw_spectra_to_irradiance()
             except Exception as e:
-                logger.error('Error while converting raw spectra to irradiance', exc_info=True)
+                logger.error(
+                    "Error while converting raw spectra to irradiance", exc_info=True
+                )
         if calibrate_irradiance_wavelengths:
             try:
                 self.calibrate_irradiance_wavelengths()
             except Exception as e:
-                logger.error('Error while calibrating irradiance wavelengths', exc_info=True)
+                logger.error(
+                    "Error while calibrating irradiance wavelengths", exc_info=True
+                )
         if convert_radiance_to_reflectance:
             try:
                 self.convert_radiance_images_to_reflectance()
             except Exception as e:
-                logger.error('Error while converting from radiance to reflectance', exc_info=True)
+                logger.error(
+                    "Error while converting from radiance to reflectance", exc_info=True
+                )
