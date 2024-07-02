@@ -1386,14 +1386,20 @@ class ImageFlightMetadata:
             Full opening angle of camera, in degrees.
             Corresponds to angle between rays hitting leftmost and
             rightmost pixels of image.
+        pitch_offset: float (degrees)
+            How much forward the camera is pointing relative to nadir
+        roll_offset: float (degrees)
+            How much to the right ("right wing up") the camera is pointing
+            relative to nadir.
+
         """
 
         # Set input attributes
         self.imu_data = imu_data
         self.image_shape = image_shape[0:2]
         self.camera_opening_angle = camera_opening_angle * (np.pi / 180)
-        self.pitch_offset = pitch_offset
-        self.roll_offset = roll_offset
+        self.pitch_offset = pitch_offset * (np.pi / 180)
+        self.roll_offset = roll_offset * (np.pi / 180)
         self.altitude_offset = altitude_offset
 
         # Get UTM coordinates and CRS code
@@ -1402,7 +1408,7 @@ class ImageFlightMetadata:
         )
         self.utm_x = utm_x
         self.utm_y = utm_y
-        self.camera_origin = np.array([utm_x[0],utm_y[0]])
+        self.camera_origin = np.array([utm_x[0], utm_y[0]])
         self.utm_epsg = utm_epsg
 
         # Time-related attributes
@@ -1428,7 +1434,6 @@ class ImageFlightMetadata:
 
         # Image origin (image transform offset)
         self.image_origin = self._calc_image_origin()
-
 
     def _calc_time_attributes(self):
         t = np.array(self.imu_data["time"])
@@ -1491,11 +1496,10 @@ class ImageFlightMetadata:
         image_origin = (
             self.camera_origin
             - 0.5 * self.swath_width * self.u_crosstrack  # Edge of swath
-            - crosstrack_offset
-            + alongtrack_offset
+            + crosstrack_offset
+            - alongtrack_offset
         )
         return image_origin
-
 
     def get_image_transform(self, ordering="alphabetical"):
         """Get 6-element affine transform for image
@@ -1524,7 +1528,13 @@ class ImageFlightMetadata:
 class SimpleGeoreferencer:
 
     def georeference_hyspec_save_geotiff(
-        self, image_path, imudata_path, geotiff_path, rgb_only=True, nodata_value=-9999
+        self,
+        image_path,
+        imudata_path,
+        geotiff_path,
+        rgb_only=True,
+        nodata_value=-9999,
+        **kwargs,
     ):
 
         image, wl, _ = read_envi(image_path)
@@ -1532,7 +1542,7 @@ class SimpleGeoreferencer:
             image, wl = rgb_subset_from_hsi(image, wl)
         self.insert_image_nodata_value(image, nodata_value)
         geotiff_profile = self.create_geotiff_profile(
-            image, imudata_path, nodata_value=nodata_value
+            image, imudata_path, nodata_value=nodata_value, **kwargs
         )
 
         self.write_geotiff(geotiff_path, image, wl, geotiff_profile)
@@ -1554,7 +1564,7 @@ class SimpleGeoreferencer:
         image[nodata_mask] = nodata_value
 
     @staticmethod
-    def create_geotiff_profile(image, imudata_path, nodata_value=-9999):
+    def create_geotiff_profile(image, imudata_path, nodata_value=-9999, **kwargs):
         """
 
         Arguments:
@@ -1564,7 +1574,7 @@ class SimpleGeoreferencer:
 
         """
         imu_data = ImuDataParser.read_imu_json_file(imudata_path)
-        image_flight_meta = ImageFlightMetadata(imu_data, image.shape)
+        image_flight_meta = ImageFlightMetadata(imu_data, image.shape, **kwargs)
         transform = Affine(*image_flight_meta.get_image_transform())
         crs_epsg = image_flight_meta.utm_epsg
 
@@ -1581,8 +1591,8 @@ class SimpleGeoreferencer:
 
         return profile
 
-    def write_geotiff(self,geotiff_path, image, wavelengths, geotiff_profile):
-        image = self.move_bands_axis_first(image) # Band ordering requred by GeoTIFF
+    def write_geotiff(self, geotiff_path, image, wavelengths, geotiff_profile):
+        image = self.move_bands_axis_first(image)  # Band ordering requred by GeoTIFF
         band_names = [f"{wl:.3f}" for wl in wavelengths]
         with rasterio.Env():
             with rasterio.open(geotiff_path, "w", **geotiff_profile) as dataset:
@@ -1913,7 +1923,7 @@ class PipelineProcessor:
                     )
                     logger.error("Skipping file")
 
-    def georeference_glint_corrected_reflectance(self):
+    def georeference_glint_corrected_reflectance(self, **kwargs):
         logger.info("---- GEOREFERENCING GLINT CORRECTED REFLECTANCE ----")
         self.reflectance_gc_rgb_dir.mkdir(exist_ok=True)
         georeferencer = SimpleGeoreferencer()
@@ -1930,7 +1940,11 @@ class PipelineProcessor:
                 )
                 try:
                     georeferencer.georeference_hyspec_save_geotiff(
-                        refl_gc_path, imu_data_path, geotiff_path, rgb_only=True
+                        refl_gc_path,
+                        imu_data_path,
+                        geotiff_path,
+                        rgb_only=True,
+                        **kwargs,
                     )
                 except Exception as e:
                     logger.error(
@@ -1977,8 +1991,11 @@ class PipelineProcessor:
 
 
 if __name__ == "__main__":
-    dataset_dir = Path('/media/mha114/Massimal2/seabee-minio/larvik/olbergholmen/aerial/hsi/20230830/massimal_larvik_olbergholmen_202308301001-south-test_hsi')
+    dataset_dir = Path(
+        "/media/mha114/Massimal2/seabee-minio/larvik/olbergholmen/aerial/hsi/20230830/massimal_larvik_olbergholmen_202308301001-south-test_hsi"
+    )
     pl = PipelineProcessor(dataset_dir)
-    pl.glint_correct_reflectance_images()
-    pl.georeference_glint_corrected_reflectance()
-
+    # pl.glint_correct_reflectance_images()
+    pl.georeference_glint_corrected_reflectance(
+        altitude_offset=-2.2, pitch_offset=3.4, roll_offset=-0.0
+    )
