@@ -94,7 +94,6 @@ def read_envi(
                     exc_info=True,
                 )
                 return
-            logger.info(f"Successfully read modified header file {header_path}")
 
     # Read wavelengths
     if "wavelength" in im_handle.metadata:
@@ -1601,6 +1600,7 @@ class SimpleGeoreferencer:
                         dataset.set_band_description(i + 1, band_names[i])
                 dataset.write(image)
 
+
     @staticmethod
     def update_image_geotransform(image_path, new_geotransform: list[float]) -> None:
         """Update affine geotransform for image using the rio command line tool
@@ -1629,6 +1629,7 @@ class PipelineProcessor:
         self.reflectance_dir = dataset_dir / "2a_reflectance"
         self.reflectance_gc_dir = dataset_dir / "2b_reflectance_gc"
         self.reflectance_gc_rgb_dir = dataset_dir / "2b_reflectance_gc" / "rgb_geotiff"
+        self.mosaic_dir = dataset_dir / "mosaics"
         self.calibration_dir = dataset_dir / "calibration"
         self.logs_dir = dataset_dir / "logs"
 
@@ -1798,7 +1799,7 @@ class PipelineProcessor:
                 f"More than one irradiance calibration file (*.dcp) found in {self.calibration_dir}"
             )
 
-    def convert_raw_images_to_radiance(self):
+    def convert_raw_images_to_radiance(self,**kwargs):
         logger.info("---- RADIANCE CONVERSION ----")
         self.radiance_dir.mkdir(exist_ok=True)
         radiance_converter = RadianceConverter(self.radiance_calibration_file)
@@ -1816,7 +1817,7 @@ class PipelineProcessor:
                 )
                 logger.warning("Skipping file")
 
-    def convert_raw_spectra_to_irradiance(self):
+    def convert_raw_spectra_to_irradiance(self,**kwargs):
         logger.info("---- IRRADIANCE CONVERSION ----")
         self.radiance_dir.mkdir(exist_ok=True)
         irradiance_converter = IrradianceConverter(self.irradiance_calibration_file)
@@ -1837,7 +1838,7 @@ class PipelineProcessor:
                     )
                     logger.error("Skipping file")
 
-    def calibrate_irradiance_wavelengths(self):
+    def calibrate_irradiance_wavelengths(self,**kwargs):
         logger.info("---- IRRADIANCE WAVELENGTH CALIBRATION ----")
         if not (self.radiance_dir.exists()):
             raise FileNotFoundError(
@@ -1860,7 +1861,7 @@ class PipelineProcessor:
                     )
                     logger.error("Skipping file")
 
-    def parse_and_save_imu_data(self):
+    def parse_and_save_imu_data(self,**kwargs):
         logger.info("---- IMU DATA PROCESSING ----")
         self.radiance_dir.mkdir(exist_ok=True)
         imu_data_parser = ImuDataParser()
@@ -1878,7 +1879,7 @@ class PipelineProcessor:
                 )
                 logger.error("Skipping file")
 
-    def convert_radiance_images_to_reflectance(self):
+    def convert_radiance_images_to_reflectance(self,**kwargs):
         logger.info("---- REFLECTANCE CONVERSION ----")
         self.reflectance_dir.mkdir(exist_ok=True)
         reflectance_converter = ReflectanceConverter()
@@ -1903,7 +1904,7 @@ class PipelineProcessor:
                     )
                     logger.error("Skipping file")
 
-    def glint_correct_reflectance_images(self):
+    def glint_correct_reflectance_images(self,**kwargs):
         logger.info("---- GLINT CORRECTION ----")
         self.reflectance_gc_dir.mkdir(exist_ok=True)
         glint_corrector = GlintCorrector()
@@ -1953,49 +1954,115 @@ class PipelineProcessor:
                     )
                     logger.error("Skipping file")
 
+    def mosaic_geotiffs(self):
+        """ Convert set of rotated geotiffs into single mosaic with overviews
+    
+        # Explanation of arguments used:
+        -overwrite:
+            Overwrite existing files without error / warning
+        -q:
+            Suppress GDAL output (quiet)
+        -r near:
+            Resampling method: Nearest neighbor
+        -of GTiff:
+            Output format: GeoTiff  
+        """
+        # geotiff_paths_string = ' '.join([str(gp) for gp in self.refl_gc_rgb_paths])
+        # gdalwarp_args = ['gdalwarp', '-overwrite', '-q', '-r', 'near', '-of', 'GTiff', 
+        #             geotiff_paths_string, str(mosaic_path)]
+        geotiff_search_string = str(self.reflectance_gc_rgb_dir / '*.tiff')
+        mosaic_path = str(self.mosaic_dir / (self.dataset_base_name + '_rgb.tiff'))
+
+        print(geotiff_search_string)
+        print(mosaic_path)
+
+        # gdalwarp_args = ['gdalwarp', '-overwrite', '-q', '-r', 'near', '-of', 'GTiff', 
+        #             geotiff_search_string, mosaic_path]
+        gdalwarp_args = f"gdalwarp -overwrite -q -r near -of GTiff {geotiff_search_string} {mosaic_path}"
+        print(gdalwarp_args)
+
+        subprocess.run(gdalwarp_args,shell=True)
+
+        # gdaladdo_args = ['gdaladdo', '-r', 'average', str(mosaic_path)]
+        # subprocess.run(gdaladdo_args)
+
     def run(
         self,
         convert_raw_images_to_radiance=True,
         convert_raw_spectra_to_irradiance=True,
         calibrate_irradiance_wavelengths=True,
+        parse_imu_data=True,
         convert_radiance_to_reflectance=True,
+        create_glint_corrected_reflectance=True,
+        create_geotiff_from_glint_corrected_reflectance=True,
+        **kwargs
     ):
         if convert_raw_images_to_radiance:
             try:
-                self.convert_raw_images_to_radiance()
+                self.convert_raw_images_to_radiance(**kwargs)
             except Exception as e:
                 logger.error(
                     "Error while converting raw images to radiance", exc_info=True
                 )
         if convert_raw_spectra_to_irradiance:
             try:
-                self.convert_raw_spectra_to_irradiance()
+                self.convert_raw_spectra_to_irradiance(**kwargs)
             except Exception as e:
                 logger.error(
                     "Error while converting raw spectra to irradiance", exc_info=True
                 )
         if calibrate_irradiance_wavelengths:
             try:
-                self.calibrate_irradiance_wavelengths()
+                self.calibrate_irradiance_wavelengths(**kwargs)
             except Exception as e:
                 logger.error(
                     "Error while calibrating irradiance wavelengths", exc_info=True
                 )
+
+        if parse_imu_data:
+            try:
+                self.parse_and_save_imu_data(**kwargs)
+            except Exception as e:
+                logger.error(
+                    "Error while parsing and saving IMU data", exc_info=True
+                )                
         if convert_radiance_to_reflectance:
             try:
-                self.convert_radiance_images_to_reflectance()
+                self.convert_radiance_images_to_reflectance(**kwargs)
             except Exception as e:
                 logger.error(
                     "Error while converting from radiance to reflectance", exc_info=True
                 )
 
+        if create_glint_corrected_reflectance:
+            try:
+                self.glint_correct_reflectance_images(**kwargs)
+            except Exception as e:
+                logger.error(
+                    "Error while glint correcting reflectance images", exc_info=True
+                )           
+
+        if create_geotiff_from_glint_corrected_reflectance:
+            try:
+                self.georeference_glint_corrected_reflectance(**kwargs)
+            except Exception as e:
+                logger.error(
+                    "Error while georeferencing glint corrected images ", exc_info=True
+                )        
+
 
 if __name__ == "__main__":
-    dataset_dir = Path(
-        "/media/mha114/Massimal2/seabee-minio/larvik/olbergholmen/aerial/hsi/20230830/massimal_larvik_olbergholmen_202308301001-south-test_hsi"
-    )
+    dataset_dir = Path("/media/mha114/Massimal2/seabee-minio/smola/skalmen/aerial/hsi/20230620/massimal_smola_skalmen_202306201640-nw_hsi")
     pl = PipelineProcessor(dataset_dir)
-    # pl.glint_correct_reflectance_images()
-    pl.georeference_glint_corrected_reflectance(
-        altitude_offset=-2.2, pitch_offset=3.4, roll_offset=-0.0
-    )
+    # pl.run(altitude_offset=-2.2, pitch_offset=3.4,)
+    pl.parse_and_save_imu_data()
+    pl.georeference_glint_corrected_reflectance()
+    
+    # dataset_dir = Path(
+    #     "/media/mha114/Massimal2/seabee-minio/larvik/olbergholmen/aerial/hsi/20230830/massimal_larvik_olbergholmen_202308301001-south-test_hsi"
+    # )
+    # pl = PipelineProcessor(dataset_dir)
+    # # pl.glint_correct_reflectance_images()
+    # pl.georeference_glint_corrected_reflectance(
+    #     altitude_offset=-2.2, pitch_offset=3.4, roll_offset=-0.0
+    # )
