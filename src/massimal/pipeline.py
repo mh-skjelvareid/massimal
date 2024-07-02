@@ -1402,6 +1402,7 @@ class ImageFlightMetadata:
         )
         self.utm_x = utm_x
         self.utm_y = utm_y
+        self.camera_origin = np.array([utm_x[0],utm_y[0]])
         self.utm_epsg = utm_epsg
 
         # Time-related attributes
@@ -1427,6 +1428,7 @@ class ImageFlightMetadata:
 
         # Image origin (image transform offset)
         self.image_origin = self._calc_image_origin()
+
 
     def _calc_time_attributes(self):
         t = np.array(self.imu_data["time"])
@@ -1481,19 +1483,19 @@ class ImageFlightMetadata:
             self.mean_altitude * np.tan(self.roll_offset) * self.u_crosstrack
         )
 
-        camera_origin = np.array([self.utm_x[0], self.utm_y[0]])  # "Middle" of swath
         # NOTE: Cross-track elements in equation below are negative because
         # UTM coordinate system is right-handed and image coordinate system
         # is left-handed. If the camera_origin is in the middle of the
         # top line of the image, u_crosstrack points away from the image
         # origin (line 0, sample 0).
         image_origin = (
-            camera_origin
+            self.camera_origin
             - 0.5 * self.swath_width * self.u_crosstrack  # Edge of swath
             - crosstrack_offset
             + alongtrack_offset
         )
         return image_origin
+
 
     def get_image_transform(self, ordering="alphabetical"):
         """Get 6-element affine transform for image
@@ -1529,10 +1531,10 @@ class SimpleGeoreferencer:
         if rgb_only:
             image, wl = rgb_subset_from_hsi(image, wl)
         self.insert_image_nodata_value(image, nodata_value)
-        image = self.move_bands_axis_first(image)
         geotiff_profile = self.create_geotiff_profile(
             image, imudata_path, nodata_value=nodata_value
         )
+
         self.write_geotiff(geotiff_path, image, wl, geotiff_profile)
 
     @staticmethod
@@ -1557,8 +1559,8 @@ class SimpleGeoreferencer:
 
         Arguments:
         image:
-            3D image array ordered as (bands,lines,samples).
-            Same as (bands, vertical dimension, horizontal dimension)
+            3D image array ordered as (lines,samples,bands).
+            Same as (vertical dimension, horizontal dimension, bands)
 
         """
         imu_data = ImuDataParser.read_imu_json_file(imudata_path)
@@ -1568,18 +1570,19 @@ class SimpleGeoreferencer:
 
         profile = DefaultGTiffProfile()
         profile.update(
-            height=image.shape[1],
-            width=image.shape[2],
-            count=image.shape[0],
+            height=image.shape[0],
+            width=image.shape[1],
+            count=image.shape[2],
             dtype=str(image.dtype),
             crs=CRS.from_epsg(crs_epsg),
             transform=transform,
             nodata=nodata_value,
         )
+
         return profile
 
-    @staticmethod
-    def write_geotiff(geotiff_path, image, wavelengths, geotiff_profile):
+    def write_geotiff(self,geotiff_path, image, wavelengths, geotiff_profile):
+        image = self.move_bands_axis_first(image) # Band ordering requred by GeoTIFF
         band_names = [f"{wl:.3f}" for wl in wavelengths]
         with rasterio.Env():
             with rasterio.open(geotiff_path, "w", **geotiff_profile) as dataset:
@@ -1971,3 +1974,11 @@ class PipelineProcessor:
                 logger.error(
                     "Error while converting from radiance to reflectance", exc_info=True
                 )
+
+
+if __name__ == "__main__":
+    dataset_dir = Path('/media/mha114/Massimal2/seabee-minio/larvik/olbergholmen/aerial/hsi/20230830/massimal_larvik_olbergholmen_202308301001-south-test_hsi')
+    pl = PipelineProcessor(dataset_dir)
+    pl.glint_correct_reflectance_images()
+    pl.georeference_glint_corrected_reflectance()
+
