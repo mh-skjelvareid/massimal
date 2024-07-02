@@ -1776,7 +1776,7 @@ class PipelineProcessor:
     def _get_raw_spectrum_paths(self):
         spec_paths = []
         for raw_image_path in self.raw_image_paths:
-            spec_base_name = raw_image_path.name.split("_")[0]
+            spec_base_name = raw_image_path.name.split("_Pika_L")[0]
             image_number = self.get_image_number(raw_image_path)
             spec_binary = (
                 raw_image_path.parent
@@ -2001,7 +2001,7 @@ class PipelineProcessor:
 
         # Run as subprocess without invoking shell. Note input file unpacking.
         gdalwarp_args = ['gdalwarp', '-overwrite', '-q', '-r', 'near', '-of', 'GTiff', 
-                 *[str(p) for p in self.refl_gc_rgb_paths], str(mosaic_path)]
+                 *[str(p) for p in self.refl_gc_rgb_paths if p.exists()], str(mosaic_path)]
         subprocess.run(gdalwarp_args)
         # NOTE: Example code below runs GDAL from within shell - avoid if possible
         # geotiff_search_string = str(self.reflectance_gc_rgb_dir / '*.tiff')
@@ -2049,6 +2049,7 @@ class PipelineProcessor:
         convert_radiance_to_reflectance=True,
         create_glint_corrected_reflectance=True,
         create_geotiff_from_glint_corrected_reflectance=True,
+        mosaic_geotiffs=True,
         **kwargs
     ):
         if convert_raw_images_to_radiance:
@@ -2104,6 +2105,13 @@ class PipelineProcessor:
                     "Error while georeferencing glint corrected images ", exc_info=True
                 )        
 
+        if mosaic_geotiffs:
+            try:
+                self.mosaic_geotiffs()
+            except Exception as e:
+                logger.error(
+                    "Error while mosaicing geotiffs ", exc_info=True
+                )    
 
 if __name__ == "__main__":
     dataset_dir = Path("/media/mha114/Massimal2/seabee-minio/smola/skalmen/aerial/hsi/20230620/massimal_smola_skalmen_202306201640-nw_hsi")
