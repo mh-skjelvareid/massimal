@@ -1600,6 +1600,22 @@ class SimpleGeoreferencer:
                         dataset.set_band_description(i + 1, band_names[i])
                 dataset.write(image)
 
+    @staticmethod
+    def update_image_file_transform(geotiff_path,imu_data_path,**kwargs):
+        """
+        
+        References:
+        -----------
+        - https://rasterio.readthedocs.io/en/latest/api/rasterio.rio.edit_info.html
+        """
+        imu_data = ImuDataParser.read_imu_json_file(imu_data_path)
+        with rasterio.open(geotiff_path,'r') as dataset:
+            im_width = dataset.width
+            im_height = dataset.height
+        image_flight_meta = ImageFlightMetadata(imu_data,image_shape=(im_height,im_width),**kwargs)
+        new_transform = image_flight_meta.get_image_transform()
+        rio_cmd = ['rio','edit-info','--transform', str(list(new_transform)), str(geotiff_path)]
+        subprocess.run(rio_cmd)
 
     @staticmethod
     def update_image_geotransform(image_path, new_geotransform: list[float]) -> None:
@@ -1954,10 +1970,15 @@ class PipelineProcessor:
                     )
                     logger.error("Skipping file")
 
-    def mosaic_geotiffs(self):
+    def mosaic_geotiffs(self, mosaic_path=None):
         """ Convert set of rotated geotiffs into single mosaic with overviews
     
-        # Explanation of arguments used:
+        Arguments:
+        mosaic_path
+            Path to output mosaic. If None, default dataset folder and name 
+            is used. 
+
+        # Explanation of gdalwarp arguments used:
         -overwrite:
             Overwrite existing files without error / warning
         -q:
@@ -1966,25 +1987,58 @@ class PipelineProcessor:
             Resampling method: Nearest neighbor
         -of GTiff:
             Output format: GeoTiff  
+
+        # Explanation of gdaladdo agruments:
+        -r average
+            Use averaging when resampling to lower spatial resolution
+        -q 
+            Suppress output (be quiet)
         """
-        # geotiff_paths_string = ' '.join([str(gp) for gp in self.refl_gc_rgb_paths])
-        # gdalwarp_args = ['gdalwarp', '-overwrite', '-q', '-r', 'near', '-of', 'GTiff', 
-        #             geotiff_paths_string, str(mosaic_path)]
-        geotiff_search_string = str(self.reflectance_gc_rgb_dir / '*.tiff')
-        mosaic_path = str(self.mosaic_dir / (self.dataset_base_name + '_rgb.tiff'))
+        logger.info(f"Mosaicing GeoTIFFs in {self.reflectance_gc_rgb_dir}")
+        self.mosaic_dir.mkdir(exist_ok=True)
+        if mosaic_path is None:
+            mosaic_path = self.mosaic_dir / (self.dataset_base_name + '_rgb.tiff')
 
-        print(geotiff_search_string)
-        print(mosaic_path)
+        # Run as subprocess without invoking shell. Note input file unpacking.
+        gdalwarp_args = ['gdalwarp', '-overwrite', '-q', '-r', 'near', '-of', 'GTiff', 
+                 *[str(p) for p in self.refl_gc_rgb_paths], str(mosaic_path)]
+        subprocess.run(gdalwarp_args)
+        # NOTE: Example code below runs GDAL from within shell - avoid if possible
+        # geotiff_search_string = str(self.reflectance_gc_rgb_dir / '*.tiff')
+        # gdalwarp_cmd = f"gdalwarp -overwrite -q -r near -of GTiff {geotiff_search_string} {mosaic_path}"
+        # subprocess.run(gdalwarp_cmd,shell=True) 
 
-        # gdalwarp_args = ['gdalwarp', '-overwrite', '-q', '-r', 'near', '-of', 'GTiff', 
-        #             geotiff_search_string, mosaic_path]
-        gdalwarp_args = f"gdalwarp -overwrite -q -r near -of GTiff {geotiff_search_string} {mosaic_path}"
-        print(gdalwarp_args)
+        # Add image pyramids to file
+        logger.info(f"Adding image pyramids to mosaic {mosaic_path}")
+        gdaladdo_args = ['gdaladdo', '-q', '-r', 'average', str(mosaic_path)]
+        subprocess.run(gdaladdo_args)
 
-        subprocess.run(gdalwarp_args,shell=True)
+    def update_geotiff_transforms(self,**kwargs):
+        logger.info("---- UPDATING GEOTIFF AFFINE TRANSFORMS ----")
+        georeferencer = SimpleGeoreferencer()
 
-        # gdaladdo_args = ['gdaladdo', '-r', 'average', str(mosaic_path)]
-        # subprocess.run(gdaladdo_args)
+        if all([not gtp.exists() for gtp in self.refl_gc_rgb_paths]):
+            warnings.warn(f"No GeoTIFF images found in {self.reflectance_gc_rgb_dir}")
+
+        for imu_data_path, geotiff_path in zip(
+            self.imu_data_paths, self.refl_gc_rgb_paths
+        ):
+            if imu_data_path.exists() and geotiff_path.exists():
+                logger.info(
+                    f"Updating transform for {geotiff_path.name}."
+                )
+                try:
+                    georeferencer.update_image_file_transform(
+                        geotiff_path,
+                        imu_data_path,
+                        **kwargs,
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Error occured while updating transform for {geotiff_path}",
+                        exc_info=True,
+                    )
+                    logger.error("Skipping file")
 
     def run(
         self,
@@ -2055,8 +2109,11 @@ if __name__ == "__main__":
     dataset_dir = Path("/media/mha114/Massimal2/seabee-minio/smola/skalmen/aerial/hsi/20230620/massimal_smola_skalmen_202306201640-nw_hsi")
     pl = PipelineProcessor(dataset_dir)
     # pl.run(altitude_offset=-2.2, pitch_offset=3.4,)
-    pl.parse_and_save_imu_data()
-    pl.georeference_glint_corrected_reflectance()
+    # pl.parse_and_save_imu_data()
+    # pl.georeference_glint_corrected_reflectance()
+    
+    # pl.update_geotiff_transforms(pitch_offset=2,altitude_offset=18) # pitch offset 3 ganske ok?
+    
     
     # dataset_dir = Path(
     #     "/media/mha114/Massimal2/seabee-minio/larvik/olbergholmen/aerial/hsi/20230830/massimal_larvik_olbergholmen_202308301001-south-test_hsi"
