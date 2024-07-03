@@ -1390,15 +1390,26 @@ class ReflectanceConverter:
     ):
         """ 
         
+        Arguments:
+        radiance_image_header:
+            Path to header file for radiance image.
         irradiance_header:
             Path to ENVI file containing irradiance measurement 
             corresponding to radiance image file.
             Not used if use_mean_ref_irrad_spec is True - in this
             case, it can be set to None.
+        reflectance_image_header:
+            Path to header file for (output) reflectance image.
+            Binary file will be saved with same name, except .hdr extension.
 
         Keyword arguments:
         ------------------
         use_mean_ref_irrad_spec:
+            Whether to use mean of irradiance reference spectra (see __init__)
+            rather than an irradiance spectrum recorded together with the 
+            radiance image. This may be useful in cases where the recorded
+            irradiance spectra are missing, or have low quality, e.g. at low
+            sun angles where movement of the UAV strongly affects the measurement. 
 
         """
         rad_image, rad_wl, rad_meta = read_envi(radiance_image_header)
@@ -1420,18 +1431,76 @@ class ReflectanceConverter:
 
 class GlintCorrector:
 
-    def __init__(self, method="flat_spec", smooth_with_savitsky_golay=True):
+    def __init__(self, method:str="flat_spec", smooth_with_savitsky_golay:bool=True):
+        """ Initialize glint corrector
+        
+        Keyword arguments:
+        method:
+            Method for removing / correcting for sun/sky glint. 
+            Currently, only 'flat_spec' is implemented.
+        smooth_with_savitsky_golay: bool
+            Whether to smooth glint corrected images using a
+            Savitsky-Golay filter.
+
+        """
         self.method = method
         self.smooth_with_savitsky_golay = smooth_with_savitsky_golay
 
     @staticmethod
-    def get_nir_ind(wl, nir_band=(740, 805), nir_ignore_band=(753, 773)):
+    def get_nir_ind(wl, nir_band:tuple[float]=(740.0, 805.0), 
+                    nir_ignore_band:tuple[float]=(753.0, 773.0)):
+        """ Get indices of NIR band 
+        
+        Keyword arguments:
+        ------------------
+        nir_band: tuple[float, float]
+            Lower and upper edge of near-infrared (NIR) band.
+        nir_ignore_band: tuple [float, float]
+            Lower and upper edge of band to ignore (not include in indices)
+            with nir_band. Default value corresponds to O2 absorption band
+            around 760 nm.
+
+        Notes:
+        ------
+        - Default values are at relatively short wavelengths (just above visible)
+        in order to generate a NIR image with high signal-no-noise level.
+        The default nir_ignore_band
+        
+        """
         nir_ind = (wl >= nir_band[0]) & (wl <= nir_band[1])
         ignore_ind = (wl >= nir_ignore_band[0]) & (wl <= nir_ignore_band[1])
         nir_ind = nir_ind & ~ignore_ind
         return nir_ind
 
-    def remove_glint_flat_spec(self, refl_image, refl_wl, **kwargs):
+    def remove_glint_flat_spec(self, refl_image:np.ndarray, refl_wl:np.ndarray, **kwargs) -> np.ndarray:
+        """Remove sun and sky glint from image assuming flat glint spectrum 
+        
+        Arguments:
+        ----------
+        refl_image:
+            Reflectance image, shape (n_lines, n_samples, n_bands)
+        refl_wl:
+            Wavelengths (in nm) for each band in refl_image
+
+        Returns:
+        --------
+        refl_image_glint_corr:
+            Glint corrected reflectance image, same shape as refl_image.
+            The mean NIR value is subtracted from each spectrum in the input
+            image. Thus, only the spectral baseline / offset is changed - 
+            the original spectral shape is maintained. 
+
+        Notes:
+        - The glint correction is based on the assumption that there is
+        (approximately) no water-leaving radiance in the NIR spectral region.
+        This is often the case, since NIR light is very effectively 
+        absorbed by water.
+        - The glint correction also assumes that the sun and sky glint
+        reflected in the water surface has a flat spectrum, so that the 
+        glint in the visible region can be estimated from the glint in the 
+        NIR region. This is usually _not_ exactly true, but the assumption
+        can be "close enough" to still produce useful results. 
+        """
         nir_ind = self.get_nir_ind(refl_wl, **kwargs)
         nir_im = np.mean(refl_image[:, :, nir_ind], axis=2, keepdims=True)
         refl_image_glint_corr = refl_image - nir_im
@@ -1444,6 +1513,7 @@ class GlintCorrector:
         return refl_image_glint_corr
 
     def glint_correct_image_file(self, image_path, glint_corr_image_path, **kwargs):
+        """ Read reflectance file, apply glint correction, and save result """
         if self.method == "flat_spec":
             image, wl, metadata = read_envi(image_path)
             glint_corr_image = self.remove_glint_flat_spec(image, wl, **kwargs)
@@ -1472,18 +1542,27 @@ class ImageFlightMetadata:
 
     def __init__(
         self,
-        imu_data,
-        image_shape,
-        camera_opening_angle=36.5,
-        pitch_offset=0.0,
-        roll_offset=0.0,
-        altitude_offset=0.0,
-        assume_square_pixels=True,
+        imu_data:dict,
+        image_shape:tuple[int],
+        camera_opening_angle:float=36.5,
+        pitch_offset:float=0.0,
+        roll_offset:float=0.0,
+        assume_square_pixels:bool=True,
+        altitude_offset:float=0.0,
         **kwargs
     ):
         """
 
         Arguments:
+        ----------
+        imu_data: dict
+            Dictionary with imu_data, as formatted by ImuDataParser
+        image_shape: tuple[int]
+            Shape of image, typically (n_lines,n_samples,n_bands)
+            
+
+        Keyword arguments:
+        ------------------
         camera_opening_angle: float (degrees)
             Full opening angle of camera, in degrees.
             Corresponds to angle between rays hitting leftmost and
@@ -1493,6 +1572,17 @@ class ImageFlightMetadata:
         roll_offset: float (degrees)
             How much to the right ("right wing up") the camera is pointing
             relative to nadir.
+        assume_square_pixels: bool
+            Whether to assume that the original image was acquired with 
+            flight parameters (flight speed, frame rate, altitude)
+            that would produce square pixels. If true, the altitude of the 
+            camera is estimated from the shape of the image and the (along-track)
+            swath length. This can be useful in cases where absolute altitude 
+            measurement of the camera IMU is not very accurate.  
+        altitude_offset:
+            Offset added to the estimated altitude. If the UAV was higher
+            in reality than that estimated by the ImageFlightMetadata 
+            object, add a positive altitude_offset.
 
         """
 
@@ -1538,12 +1628,14 @@ class ImageFlightMetadata:
         self.image_origin = self._calc_image_origin()
 
     def _calc_time_attributes(self):
+        """ Calculate time duration and sampling interval of IMU data """
         t = np.array(self.imu_data["time"])
         dt = np.mean(np.diff(t))
         t_total = len(t) * dt
         return t_total, dt
 
     def _calc_alongtrack_properties(self):
+        """ Calculate along-track velocity, gsd, and swath length """
         vx_alongtrack = (self.utm_x[-1] - self.utm_x[0]) / self.t_total
         vy_alongtrack = (self.utm_y[-1] - self.utm_y[0]) / self.t_total
         v_alongtrack = np.array((vx_alongtrack, vy_alongtrack))
@@ -1574,6 +1666,7 @@ class ImageFlightMetadata:
         return altitude + self.altitude_offset
 
     def _calc_crosstrack_properties(self):
+        """ Calculate cross-track unit vector, swath width and sampling distance """
         u_crosstrack = np.array(
             [-self.u_alongtrack[1], self.u_alongtrack[0]]
         )  # Rotate 90 CCW
@@ -1582,17 +1675,16 @@ class ImageFlightMetadata:
         return u_crosstrack, swath_width, gsd_crosstrack
 
     def _calc_image_origin(self):
-
+        """ Calculate location of image pixel (0,0) in georeferenced coordinates """
         alongtrack_offset = (
             self.mean_altitude * np.tan(self.pitch_offset) * self.u_alongtrack
         )
         crosstrack_offset = (
             self.mean_altitude * np.tan(self.roll_offset) * self.u_crosstrack
         )
-
-        # NOTE: Cross-track elements in equation below are negative because
-        # UTM coordinate system is right-handed and image coordinate system
-        # is left-handed. If the camera_origin is in the middle of the
+        # NOTE: Signs of cross-track elements in equation below are "flipped" 
+        # because UTM coordinate system is right-handed and image coordinate 
+        # system is left-handed. If the camera_origin is in the middle of the
         # top line of the image, u_crosstrack points away from the image
         # origin (line 0, sample 0).
         image_origin = (
@@ -1631,14 +1723,32 @@ class SimpleGeoreferencer:
 
     def georeference_hyspec_save_geotiff(
         self,
-        image_path,
-        imudata_path,
-        geotiff_path,
-        rgb_only=True,
-        nodata_value=-9999,
+        image_path:Union[Path,str],
+        imudata_path:Union[Path,str],
+        geotiff_path:Union[Path,str],
+        rgb_only:bool=True,
+        nodata_value:int=-9999,
         **kwargs,
     ):
-
+        """ Georeference hyperspectral image and save as GeoTIFF 
+        
+        Arguments:
+        ----------
+        image_path:
+            Path to hyperspectral image header.
+        imudata_path:
+            Path to JSON file containing IMU data.
+        geotiff_path:
+            Path to (output) GeoTIFF file.
+        rgb_only: bool
+            Whether to only output an RGB version of the hyperspectral image.
+            If false, the entire hyperspectral image is used. Note that
+            this typically creates very large files that some programs
+            (e.g. QGIS) can struggle to read. 
+        nodata_value:
+            Value to insert in place of invalid pixels.
+            Pixels which contain "all zeros" are considered invalid.
+        """
         image, wl, _ = read_envi(image_path)
         if rgb_only:
             image, wl = rgb_subset_from_hsi(image, wl)
@@ -1651,6 +1761,7 @@ class SimpleGeoreferencer:
 
     @staticmethod
     def move_bands_axis_first(image):
+        """ Move spectral bands axis from position 2 to 0 """
         return np.moveaxis(image, 2, 0)
 
     @staticmethod
@@ -1658,21 +1769,31 @@ class SimpleGeoreferencer:
         """Insert nodata values in image (in-place)
 
         Arguments:
+        ----------
         image:
             3D image array ordered as (lines, samples, bands)
-
+            Pixels where every band value is equal to zero
+            are interpreted as invalid (no data).
+        nodata_value:
+            Value to insert in place of invalid data.
         """
         nodata_mask = np.all(image == 0, axis=2)
         image[nodata_mask] = nodata_value
 
     @staticmethod
-    def create_geotiff_profile(image, imudata_path, nodata_value=-9999, **kwargs):
-        """
+    def create_geotiff_profile(image:np.ndarray, imudata_path:Union[Path,str], nodata_value:int=-9999, **kwargs):
+        """ Create profile for writing image as geotiff using rasterio
 
         Arguments:
+        ----------
         image:
-            3D image array ordered as (lines,samples,bands).
-            Same as (vertical dimension, horizontal dimension, bands)
+            3D image array ordered, shape (n_lines,n_samples,n_bands).
+        imudata_path:
+            Path to JSON file containing IMU data for image
+
+        Keyword arguments:
+        ------------------
+        nodata_value:
 
         """
         imu_data = ImuDataParser.read_imu_json_file(imudata_path)
@@ -1693,7 +1814,29 @@ class SimpleGeoreferencer:
 
         return profile
 
-    def write_geotiff(self, geotiff_path, image, wavelengths, geotiff_profile):
+    def write_geotiff(self, geotiff_path:Union[Path,str], image:np.ndarray, wavelengths:np.ndarray, geotiff_profile:dict):
+        """ Write image as GeoTIFF 
+        
+        Arguments:
+        ----------
+        geotiff_path: Path | str
+            Path to (output) GeoTIFF file
+        image: np.ndarray
+            Image to write, shape (n_lines, n_samples, n_bands)
+        wavelengths: np.ndarray
+            Wavelengths (in nm) corresponding to each image band.
+            The wavelengths are used to set the descption of each band
+            in the GeoTIFF file.
+
+        # Notes:
+        --------
+        - Rasterio / GDAL required the image to be ordered "bands first",
+        e.g. shape (bands, lines, samples). However, the default used by e.g.
+        the spectral library is (lines, samples, bands), and this convention
+        should be used consistenly to avoid bugs. This function moves the band
+        axis directly before writing.
+        
+        """
         image = self.move_bands_axis_first(image)  # Band ordering requred by GeoTIFF
         band_names = [f"{wl:.3f}" for wl in wavelengths]
         with rasterio.Env():
@@ -1704,9 +1847,25 @@ class SimpleGeoreferencer:
                 dataset.write(image)
 
     @staticmethod
-    def update_image_file_transform(geotiff_path,imu_data_path,**kwargs):
-        """
+    def update_image_file_transform(geotiff_path:Union[Path,str],imu_data_path:Union[Path,str],**kwargs):
+        """ Update the affine transform of an image 
         
+        Arguments:
+        ----------
+        geotiff_path:
+            Path to existing GeoTIFF file. 
+        imu_data_path:
+            Path to JSON file with IMU data.
+
+        Keyword arguments:
+        ------------------
+        **kwargs:
+            Keyword arguments are passed along to create an ImageFlightMetadata object.
+            Options include e.g. 'altitude_offset'. This can be useful in case
+            the shape of the existing GeoTIFF indicates that some adjustments 
+            should be made to the image transform (which can be re-generated using
+            an ImageFlightMetadata object).
+
         References:
         -----------
         - https://rasterio.readthedocs.io/en/latest/api/rasterio.rio.edit_info.html
@@ -1720,27 +1879,24 @@ class SimpleGeoreferencer:
         rio_cmd = ['rio','edit-info','--transform', str(list(new_transform)), str(geotiff_path)]
         subprocess.run(rio_cmd)
 
-    @staticmethod
-    def update_image_geotransform(image_path, new_geotransform: list[float]) -> None:
-        """Update affine geotransform for image using the rio command line tool
-
-        # Input parameters
-        image_path:
-            Path to image, will be modified in-place
-        new_geotransform:
-            6-parameter affine transform, list of floats, ordered (a,b,c,d,e,f)
-
-        See also https://rasterio.readthedocs.io/en/latest/api/rasterio.rio.edit_info.html
-        """
-        rio_cmd = (
-            f'rio edit-info --transform "{list(new_geotransform)}" {str(image_path)}'
-        )
-        subprocess.run(rio_cmd)
 
 
 class PipelineProcessor:
 
     def __init__(self, dataset_dir: Union[Path, str]):
+        """ Create a pipeline for processing all data in a dataset 
+        
+        Arguments:
+        ----------
+        dataset_dir:
+            Path to folder containing dataset. The name of the folder
+            will be used as the "base name" for all processed files.
+            The folder should contain at least two subfolders:
+            - 0_raw: Contains all raw images as saved by Resonon airborne system.
+            - calibration: Contains Resonon calibration files for 
+            camera (*.icp) and downwelling irradiance sensor (*.dcp)
+        
+        """
         self.dataset_dir = Path(dataset_dir)
         self.dataset_base_name = dataset_dir.name
         self.raw_dir = dataset_dir / "0_raw"
@@ -1836,11 +1992,23 @@ class PipelineProcessor:
 
     @staticmethod
     def get_image_number(raw_image_path):
+        """ Get image number from raw image
+        
+        Notes:
+        ------
+        Raw files are numbered sequentially, but the numbers are not
+        zero-padded. This can lead to incorrect sorting of the images, e.g.
+        ['im_1','im_2','im_10'] (simplified names for example) are sorted  
+        ['im_1','im_10','im_2']. By extracting the numbers from filenames
+        of raw files and sorting explicitly on these (as integers),
+        correct ordering can be achieved.  
+        """
         image_file_stem = raw_image_path.name.split(".")[0]
         image_number = image_file_stem.split("_")[-1]
         return int(image_number)
 
     def _create_base_file_names(self):
+        """ Create numbered base names for processed files """
         base_file_names = [
             f"{self.dataset_base_name}_{i:03d}"
             for i in range(len(self.raw_image_paths))
@@ -1848,6 +2016,7 @@ class PipelineProcessor:
         return base_file_names
 
     def _create_processed_file_paths(self):
+        """ Define default subfolders for processed files """
         file_paths = {
             "radiance": [],
             "irradiance": [],
@@ -1877,6 +2046,7 @@ class PipelineProcessor:
         return file_paths
 
     def _get_raw_spectrum_paths(self):
+        """ Search for raw files matching Resonon default naming """ 
         spec_paths = []
         for raw_image_path in self.raw_image_paths:
             spec_base_name = raw_image_path.name.split("_Pika_L")[0]
@@ -1893,6 +2063,7 @@ class PipelineProcessor:
         return spec_paths
 
     def _get_radiance_calibration_path(self):
+        """ Search for radiance calibration file (*.icp) """
         icp_files = list(self.calibration_dir.glob("*.icp"))
         if len(icp_files) == 1:
             return icp_files[0]
@@ -1906,6 +2077,7 @@ class PipelineProcessor:
             )
 
     def _get_irradiance_calibration_path(self):
+        """ Search for irradiance calibration file (*.dcp) """
         dcp_files = list(self.calibration_dir.glob("*.dcp"))
         if len(dcp_files) == 1:
             return dcp_files[0]
@@ -1919,6 +2091,7 @@ class PipelineProcessor:
             )
 
     def convert_raw_images_to_radiance(self,**kwargs):
+        """ Convert raw hyperspectral images (DN) to radiance (microflicks) """
         logger.info("---- RADIANCE CONVERSION ----")
         self.radiance_dir.mkdir(exist_ok=True)
         radiance_converter = RadianceConverter(self.radiance_calibration_file)
@@ -1937,6 +2110,7 @@ class PipelineProcessor:
                 logger.warning("Skipping file")
 
     def convert_raw_spectra_to_irradiance(self,**kwargs):
+        """ Convert raw spectra (DN) to irradiance (W/(m2*nm)) """
         logger.info("---- IRRADIANCE CONVERSION ----")
         self.radiance_dir.mkdir(exist_ok=True)
         irradiance_converter = IrradianceConverter(self.irradiance_calibration_file)
@@ -1958,6 +2132,7 @@ class PipelineProcessor:
                     logger.error("Skipping file")
 
     def calibrate_irradiance_wavelengths(self,**kwargs):
+        """ Calibrate irradiance wavelengths using Fraunhofer absorption lines """
         logger.info("---- IRRADIANCE WAVELENGTH CALIBRATION ----")
         if not (self.radiance_dir.exists()):
             raise FileNotFoundError(
@@ -1981,6 +2156,7 @@ class PipelineProcessor:
                     logger.error("Skipping file")
 
     def parse_and_save_imu_data(self,**kwargs):
+        """ Parse *.lcf and *.times files with IMU data and save as JSON """
         logger.info("---- IMU DATA PROCESSING ----")
         self.radiance_dir.mkdir(exist_ok=True)
         imu_data_parser = ImuDataParser()
@@ -1999,6 +2175,7 @@ class PipelineProcessor:
                 logger.error("Skipping file")
 
     def convert_radiance_images_to_reflectance(self,**kwargs):
+        """ Convert radiance images (microflicks) to reflectance (unitless) """
         logger.info("---- REFLECTANCE CONVERSION ----")
         self.reflectance_dir.mkdir(exist_ok=True)
         reflectance_converter = ReflectanceConverter(irrad_spec_paths=self.irrad_spec_paths)
@@ -2024,6 +2201,7 @@ class PipelineProcessor:
                     logger.error("Skipping file")
 
     def glint_correct_reflectance_images(self,**kwargs):
+        """ Correct for sun and sky glint in reflectance images """
         logger.info("---- GLINT CORRECTION ----")
         self.reflectance_gc_dir.mkdir(exist_ok=True)
         glint_corrector = GlintCorrector()
@@ -2044,6 +2222,7 @@ class PipelineProcessor:
                     logger.error("Skipping file")
 
     def georeference_glint_corrected_reflectance(self, **kwargs):
+        """ Create georeferenced GeoTIFF versions of glint corrected reflectance """
         logger.info("---- GEOREFERENCING GLINT CORRECTED REFLECTANCE ----")
         self.reflectance_gc_rgb_dir.mkdir(exist_ok=True)
         georeferencer = SimpleGeoreferencer()
@@ -2117,6 +2296,18 @@ class PipelineProcessor:
         subprocess.run(gdaladdo_args)
 
     def update_geotiff_transforms(self,**kwargs):
+        """ Batch update GeoTIFF transforms 
+        
+        Image affine transforms are re-calculated based on IMU data and
+        (optional) keyword arguments.
+
+        Keyword arguments:
+        ------------------
+        **kwargs:
+            keyword arguments accepted by ImageFlightSegment, e.g. 
+            "altitude_offset". 
+        
+        """
         logger.info("---- UPDATING GEOTIFF AFFINE TRANSFORMS ----")
         georeferencer = SimpleGeoreferencer()
 
@@ -2155,6 +2346,23 @@ class PipelineProcessor:
         mosaic_geotiffs=True,
         **kwargs
     ):
+        """ Run pipeline process(es) 
+        
+        Keyword arguments:
+        ------------------
+        convert_raw_images_to_radiance,
+        convert_raw_spectra_to_irradiance,
+        calibrate_irradiance_wavelengths,
+        parse_imu_data,
+        convert_radiance_to_reflectance,
+        glint_correct_reflectance,
+        geotiff_from_glint_corrected_reflectance,
+        mosaic_geotiffs: bool
+            All keyword arguments are boolean "switches" used to indicate
+            whether a process should be run. By default, all are True.
+            If e.g. raw images have already been processed, specify 
+            convert_raw_images_to_radiance=False to avoid reprocessing. 
+        """
         if convert_raw_images_to_radiance:
             try:
                 self.convert_raw_images_to_radiance(**kwargs)
@@ -2217,6 +2425,9 @@ class PipelineProcessor:
                 )    
 
 if __name__ == "__main__":
+    """ Code to execute when running file as script.
+    Mostly used for debugging. 
+    """
     dataset_dir = Path('/media/mha114/Massimal2/seabee-minio/smola/skalmen/aerial/hsi/20230620/massimal_smola_skalmen_202306201842-se_hsi')
     pl = PipelineProcessor(dataset_dir)
     pl.run(convert_raw_images_to_radiance=False,
