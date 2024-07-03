@@ -143,13 +143,14 @@ def save_envi(
 
 
 def wavelength_array_to_header_string(wavelengths: np.ndarray):
+    """ Convert numeric wavelength array to single ENVI-formatted string """
     wl_str = [f"{wl:.3f}" for wl in wavelengths]  # Convert each number to string
     wl_str = "{" + ", ".join(wl_str) + "}"  # Join into single string
     return wl_str
 
 
 def update_header_wavelengths(wavelengths: np.ndarray, header_path: Union[Path, str]):
-    """Update ENVI header wavelengths"""
+    """ Update ENVI header wavelengths """
     header_path = Path(header_path)
     header_dict = spectral.io.envi.read_envi_header(header_path)
     wl_str = wavelength_array_to_header_string(wavelengths)
@@ -227,16 +228,24 @@ def savitzky_golay_filter(
     )
 
 
-def closest_wl_index(wl_array: np.ndarray, target_wl: Union[float, int]):
+def closest_wl_index(wl_array: np.ndarray, target_wl: Union[float, int]) -> int:
     """Get index in sampled wavelength array closest to target wavelength"""
     return np.argmin(abs(wl_array - target_wl))
 
 
 def rgb_subset_from_hsi(
-    hyspec_im, hyspec_wl, rgb_target_wl=(650, 550, 450)
+    hyspec_im: np.ndarray, hyspec_wl, rgb_target_wl=(650, 550, 450)
 ) -> tuple[np.ndarray, np.ndarray]:
     """Extract 3 bands from hyperspectral image representing red, green, blue
 
+    Arguments:
+    ----------
+    hyspec_im: np.ndarray
+        Hyperspectral image, shape (n_lines, n_samples, n_bands)
+    hyspec_wl: np.ndarray
+        Wavelengths for each band of hyperspectral image, in nm.
+        Shape (n_bands,)
+    
     Returns:
     --------
     rgb_im: np.ndarray
@@ -252,7 +261,8 @@ def rgb_subset_from_hsi(
     return rgb_im, rgb_wl
 
 
-def convert_long_lat_to_utm(long, lat, return_utm_epsg=True):
+def convert_long_lat_to_utm(long:Union[float,np.ndarray], lat:Union[float,np.ndarray]
+                            ) -> tuple[Union[float,np.ndarray],Union[float,np.ndarray],int]:
     """Convert longitude and latitude coordinates (WGS84) to UTM
 
     # Input parameters:
@@ -260,16 +270,13 @@ def convert_long_lat_to_utm(long, lat, return_utm_epsg=True):
         Longitude coordinate(s), scalar or array
     lat:
         Latitude coordinate(s), scalar or array
-    return_utm_epsg:
-        The UTM zone is automatically estimated based on coordinates.
-        If return_utm_epsg=True, the EPSG code for the UTM zone is returned
 
     Returns:
     UTMx:
         UTM x coordinate ("Easting"), scalar or array
     UTMy:
         UTM y coordinate ("Northing"), scalar or array
-    UTM_epsg (only if return_utm_epsg=True):
+    UTM_epsg :
         EPSG code (integer) for UTM zone
     """
     utm_crs_list = pyproj.database.query_utm_crs_info(
@@ -284,10 +291,9 @@ def convert_long_lat_to_utm(long, lat, return_utm_epsg=True):
     utm_crs = pyproj.CRS.from_epsg(utm_crs_list[0].code)
     proj = pyproj.Proj(utm_crs)
     UTMx, UTMy = proj(long, lat)
-    if return_utm_epsg:
-        return UTMx, UTMy, utm_crs.to_epsg()
-    else:
-        return UTMx, UTMy
+
+    return UTMx, UTMy, utm_crs.to_epsg()
+
 
 
 class RadianceCalibrationDataset:
@@ -1231,6 +1237,13 @@ class ReflectanceConverter:
         """
         
         Keyword arguments:
+        wl_min, wl_max: int | float
+            Minimum/maximum wavelength to include in the reflectance image.
+            The signal-to-noise ratio of both radiance images and irradiance
+            spectra is generally lower at the low and high ends. When
+            radiance is divided by noisy irradiance values close to zero, the
+            noise can "blow up". Limiting the wavelength range can ensure 
+            that the reflectance images have more well-behaved values. 
         irrad_spec_paths:
             List of paths to irradiance spectra which can be used as reference 
             spectra when convering radiance to irradiance. 
@@ -1249,17 +1262,43 @@ class ReflectanceConverter:
 
     @staticmethod
     def get_mean_irrad_spec(irrad_spec_paths):
+        """ Read irradiance spectra from file and calculate mean """
         irrad_spectra = []
         for irrad_spec_path in irrad_spec_paths:
-            irrad_spec, irrad_wl,_ = read_envi(irrad_spec_path)
-            irrad_spectra.append(irrad_spec.squeeze())
+            if irrad_spec_path.exists():
+                irrad_spec, irrad_wl,_ = read_envi(irrad_spec_path)
+                irrad_spectra.append(irrad_spec.squeeze())
         irrad_spectra = np.array(irrad_spectra)
         irrad_spec_mean = np.mean(irrad_spectra,axis=0)
         return irrad_spec_mean, irrad_wl, irrad_spectra
 
 
     @staticmethod
-    def conv_spec_with_gaussian(spec, wl, gauss_fwhm):
+    def conv_spec_with_gaussian(spec:np.ndarray, wl:np.ndarray, gauss_fwhm:float) -> np.ndarray:
+        """ Convolve spectrum with Gaussian kernel to smooth / blur spectral details 
+        
+        Arguments:
+        ----------
+        spec: np.ndarray
+            Input spectrum, shape (n_bands,)
+        wl: np.ndarray, nanometers
+            Wavelengths corresponding to each spectrum value, shape (n_bands,)
+        gauss_fwhm
+            "Full width half maximum" (FWHM) of Gaussian kernel used for
+            smoothin the spectrum. FWHM is the width of the kernel in nanometers 
+            at the level where the kernel values are half of the maximum value. 
+
+        Returns:
+        --------
+        spec_filtered: np.ndarray
+            Filtered / smoothed version of spec, with same dimensions
+
+        Notes:
+        ------
+        - When the kernel extends outside the data while filtering, edges are handled 
+        by repeating the nearest sampled value (edge value).
+
+        """
         sigma_wl = gauss_fwhm * 0.588705  # sigma = FWHM / 2*sqrt(2*ln(2))
         dwl = np.mean(np.diff(wl))  # Downwelling wavelength sampling dist.
         sigma_pix = sigma_wl / dwl  # Sigma in units of spectral samples
@@ -1289,12 +1328,27 @@ class ReflectanceConverter:
 
         Arguments:
         ----------
-
         rad_image:
             Spectral radiance image in units of microflicks = 10e-5 W/(sr*m2*nm)
-
+            Shape (n_lines, n_samples, n_bands)
+        raw_wl:
+            Wavelengths (in nanometers) corresponding to each band in rad_image
         irrad_spec:
             Spectral irradiance in units of W/(m2*nm)
+        irrad_wl:
+            Wavelengths (in nanometers) corresponding to each band in irrad_spec
+
+        Keyword arguments:
+        ------------------
+        convolve_irradiance_with_gaussian: bool
+            Indicate if irradiance spectrum should be smoothed with Gaussian kernel.
+            This may be useful if irradiance is measured with a higher spectral 
+            resolution than radiance, and thus has sharper "spikes".
+        gauss_fwhm: float
+            Full-width-half-maximum for Gaussian kernel, in nanometers.
+            Only used if convolve_irradiance_with_gaussian==True
+        smooth_with_savitsky_golay: bool
+            Whether to smooth the reflectance spectra using a Savitzky-Golay filter
 
         """
 
@@ -1425,6 +1479,7 @@ class ImageFlightMetadata:
         roll_offset=0.0,
         altitude_offset=0.0,
         assume_square_pixels=True,
+        **kwargs
     ):
         """
 
@@ -1451,7 +1506,7 @@ class ImageFlightMetadata:
 
         # Get UTM coordinates and CRS code
         utm_x, utm_y, utm_epsg = convert_long_lat_to_utm(
-            imu_data["longitude"], imu_data["latitude"], return_utm_epsg=True
+            imu_data["longitude"], imu_data["latitude"]
         )
         self.utm_x = utm_x
         self.utm_y = utm_y
@@ -2095,8 +2150,8 @@ class PipelineProcessor:
         calibrate_irradiance_wavelengths=True,
         parse_imu_data=True,
         convert_radiance_to_reflectance=True,
-        create_glint_corrected_reflectance=True,
-        create_geotiff_from_glint_corrected_reflectance=True,
+        glint_correct_reflectance=True,
+        geotiff_from_glint_corrected_reflectance=True,
         mosaic_geotiffs=True,
         **kwargs
     ):
@@ -2137,7 +2192,7 @@ class PipelineProcessor:
                     "Error while converting from radiance to reflectance", exc_info=True
                 )
 
-        if create_glint_corrected_reflectance:
+        if glint_correct_reflectance:
             try:
                 self.glint_correct_reflectance_images(**kwargs)
             except Exception as e:
@@ -2145,7 +2200,7 @@ class PipelineProcessor:
                     "Error while glint correcting reflectance images", exc_info=True
                 )           
 
-        if create_geotiff_from_glint_corrected_reflectance:
+        if geotiff_from_glint_corrected_reflectance:
             try:
                 self.georeference_glint_corrected_reflectance(**kwargs)
             except Exception as e:
@@ -2162,15 +2217,29 @@ class PipelineProcessor:
                 )    
 
 if __name__ == "__main__":
-    dataset_dir = Path('/media/mha114/Massimal2/seabee-minio/smola/skalmen/aerial/hsi/20230620/massimal_smola_skalmen_202306201815-se_hsi')
+    dataset_dir = Path('/media/mha114/Massimal2/seabee-minio/smola/skalmen/aerial/hsi/20230620/massimal_smola_skalmen_202306201842-se_hsi')
     pl = PipelineProcessor(dataset_dir)
     pl.run(convert_raw_images_to_radiance=False,
            convert_raw_spectra_to_irradiance=False,
            calibrate_irradiance_wavelengths=False,
            parse_imu_data=False,
+           convert_radiance_to_reflectance=False,
+           glint_correct_reflectance=False,
            pitch_offset=2,
            altitude_offset=18,
            use_mean_ref_irrad_spec=True)
+
+    # dataset_dir = Path('/media/mha114/Massimal2/seabee-minio/smola/skalmen/aerial/hsi/20230620/massimal_smola_skalmen_202306201815-se_hsi')
+    # pl = PipelineProcessor(dataset_dir)
+    # pl.run(convert_raw_images_to_radiance=False,
+    #        convert_raw_spectra_to_irradiance=False,
+    #        calibrate_irradiance_wavelengths=False,
+    #        parse_imu_data=False,
+    #        convert_radiance_to_reflectance=False,
+    #        glint_correct_reflectance=False,
+    #        pitch_offset=2,
+    #        altitude_offset=18,
+    #        use_mean_ref_irrad_spec=True)
     
     # dataset_dir = Path("/media/mha114/Massimal2/seabee-minio/smola/skalmen/aerial/hsi/20230620/massimal_smola_skalmen_202306201640-nw_hsi")
     # pl = PipelineProcessor(dataset_dir)
