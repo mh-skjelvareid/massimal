@@ -143,14 +143,14 @@ def save_envi(
 
 
 def wavelength_array_to_header_string(wavelengths: np.ndarray):
-    """ Convert numeric wavelength array to single ENVI-formatted string """
+    """Convert numeric wavelength array to single ENVI-formatted string"""
     wl_str = [f"{wl:.3f}" for wl in wavelengths]  # Convert each number to string
     wl_str = "{" + ", ".join(wl_str) + "}"  # Join into single string
     return wl_str
 
 
 def update_header_wavelengths(wavelengths: np.ndarray, header_path: Union[Path, str]):
-    """ Update ENVI header wavelengths """
+    """Update ENVI header wavelengths"""
     header_path = Path(header_path)
     header_dict = spectral.io.envi.read_envi_header(header_path)
     wl_str = wavelength_array_to_header_string(wavelengths)
@@ -245,7 +245,7 @@ def rgb_subset_from_hsi(
     hyspec_wl: np.ndarray
         Wavelengths for each band of hyperspectral image, in nm.
         Shape (n_bands,)
-    
+
     Returns:
     --------
     rgb_im: np.ndarray
@@ -261,8 +261,9 @@ def rgb_subset_from_hsi(
     return rgb_im, rgb_wl
 
 
-def convert_long_lat_to_utm(long:Union[float,np.ndarray], lat:Union[float,np.ndarray]
-                            ) -> tuple[Union[float,np.ndarray],Union[float,np.ndarray],int]:
+def convert_long_lat_to_utm(
+    long: Union[float, np.ndarray], lat: Union[float, np.ndarray]
+) -> tuple[Union[float, np.ndarray], Union[float, np.ndarray], int]:
     """Convert longitude and latitude coordinates (WGS84) to UTM
 
     # Input parameters:
@@ -293,7 +294,6 @@ def convert_long_lat_to_utm(long:Union[float,np.ndarray], lat:Union[float,np.nda
     UTMx, UTMy = proj(long, lat)
 
     return UTMx, UTMy, utm_crs.to_epsg()
-
 
 
 class RadianceCalibrationDataset:
@@ -1231,52 +1231,56 @@ class ReflectanceConverter:
     """A class for converting images from Resonon Pika L cameras to reflectance"""
 
     def __init__(
-        self, wl_min: Union[int, float] = 400, wl_max: Union[int, float] = 930,
-        irrad_spec_paths = None
+        self,
+        wl_min: Union[int, float] = 400,
+        wl_max: Union[int, float] = 930,
+        irrad_spec_paths=None,
     ):
         """
-        
+
         Keyword arguments:
         wl_min, wl_max: int | float
             Minimum/maximum wavelength to include in the reflectance image.
             The signal-to-noise ratio of both radiance images and irradiance
             spectra is generally lower at the low and high ends. When
             radiance is divided by noisy irradiance values close to zero, the
-            noise can "blow up". Limiting the wavelength range can ensure 
-            that the reflectance images have more well-behaved values. 
+            noise can "blow up". Limiting the wavelength range can ensure
+            that the reflectance images have more well-behaved values.
         irrad_spec_paths:
-            List of paths to irradiance spectra which can be used as reference 
-            spectra when convering radiance to irradiance. 
-        
+            List of paths to irradiance spectra which can be used as reference
+            spectra when convering radiance to irradiance.
+
         """
         self.wl_min = float(wl_min)
         self.wl_max = float(wl_max)
         if irrad_spec_paths is not None:
-            irrad_spec_mean, irrad_wl, irrad_spectra = self.get_mean_irrad_spec(irrad_spec_paths)
+            irrad_spec_mean, irrad_wl, irrad_spectra = self.get_mean_irrad_spec(
+                irrad_spec_paths
+            )
         else:
             irrad_spec_mean, irrad_wl, irrad_spectra = None, None, None
         self.ref_irrad_spec_mean = irrad_spec_mean
         self.ref_irrad_spec_wl = irrad_wl
         self.ref_irrad_spectra = irrad_spectra
 
-
     @staticmethod
     def get_mean_irrad_spec(irrad_spec_paths):
-        """ Read irradiance spectra from file and calculate mean """
+        """Read irradiance spectra from file and calculate mean"""
         irrad_spectra = []
         for irrad_spec_path in irrad_spec_paths:
             if irrad_spec_path.exists():
-                irrad_spec, irrad_wl,_ = read_envi(irrad_spec_path)
+                irrad_spec, irrad_wl, _ = read_envi(irrad_spec_path)
                 irrad_spectra.append(irrad_spec.squeeze())
         irrad_spectra = np.array(irrad_spectra)
-        irrad_spec_mean = np.mean(irrad_spectra,axis=0)
+        irrad_spec_mean = np.mean(irrad_spectra, axis=0)
         return irrad_spec_mean, irrad_wl, irrad_spectra
 
-
     @staticmethod
-    def conv_spec_with_gaussian(spec:np.ndarray, wl:np.ndarray, gauss_fwhm:float) -> np.ndarray:
-        """ Convolve spectrum with Gaussian kernel to smooth / blur spectral details 
-        
+    def conv_spec_with_gaussian(
+        spec: np.ndarray, wl: np.ndarray, gauss_fwhm: float
+    ) -> np.ndarray:
+        """Convolve spectrum with Gaussian kernel to smooth / blur spectral details
+
         Arguments:
         ----------
         spec: np.ndarray
@@ -1285,8 +1289,8 @@ class ReflectanceConverter:
             Wavelengths corresponding to each spectrum value, shape (n_bands,)
         gauss_fwhm
             "Full width half maximum" (FWHM) of Gaussian kernel used for
-            smoothin the spectrum. FWHM is the width of the kernel in nanometers 
-            at the level where the kernel values are half of the maximum value. 
+            smoothin the spectrum. FWHM is the width of the kernel in nanometers
+            at the level where the kernel values are half of the maximum value.
 
         Returns:
         --------
@@ -1295,7 +1299,7 @@ class ReflectanceConverter:
 
         Notes:
         ------
-        - When the kernel extends outside the data while filtering, edges are handled 
+        - When the kernel extends outside the data while filtering, edges are handled
         by repeating the nearest sampled value (edge value).
 
         """
@@ -1342,7 +1346,7 @@ class ReflectanceConverter:
         ------------------
         convolve_irradiance_with_gaussian: bool
             Indicate if irradiance spectrum should be smoothed with Gaussian kernel.
-            This may be useful if irradiance is measured with a higher spectral 
+            This may be useful if irradiance is measured with a higher spectral
             resolution than radiance, and thus has sharper "spikes".
         gauss_fwhm: float
             Full-width-half-maximum for Gaussian kernel, in nanometers.
@@ -1385,16 +1389,16 @@ class ReflectanceConverter:
         radiance_image_header: Union[Path, str],
         irradiance_header: Union[Path, str],
         reflectance_image_header: Union[Path, str],
-        use_mean_ref_irrad_spec: bool=False,
+        use_mean_ref_irrad_spec: bool = False,
         **kwargs,
     ):
-        """ 
-        
+        """
+
         Arguments:
         radiance_image_header:
             Path to header file for radiance image.
         irradiance_header:
-            Path to ENVI file containing irradiance measurement 
+            Path to ENVI file containing irradiance measurement
             corresponding to radiance image file.
             Not used if use_mean_ref_irrad_spec is True - in this
             case, it can be set to None.
@@ -1406,16 +1410,16 @@ class ReflectanceConverter:
         ------------------
         use_mean_ref_irrad_spec:
             Whether to use mean of irradiance reference spectra (see __init__)
-            rather than an irradiance spectrum recorded together with the 
+            rather than an irradiance spectrum recorded together with the
             radiance image. This may be useful in cases where the recorded
             irradiance spectra are missing, or have low quality, e.g. at low
-            sun angles where movement of the UAV strongly affects the measurement. 
+            sun angles where movement of the UAV strongly affects the measurement.
 
         """
         rad_image, rad_wl, rad_meta = read_envi(radiance_image_header)
         if use_mean_ref_irrad_spec:
             if self.ref_irrad_spec_mean is None:
-                raise ValueError('Missing reference irradiance spectra.')
+                raise ValueError("Missing reference irradiance spectra.")
             irrad_spec = self.ref_irrad_spec_mean
             irrad_wl = self.ref_irrad_spec_wl
         else:
@@ -1431,12 +1435,14 @@ class ReflectanceConverter:
 
 class GlintCorrector:
 
-    def __init__(self, method:str="flat_spec", smooth_with_savitsky_golay:bool=True):
-        """ Initialize glint corrector
-        
+    def __init__(
+        self, method: str = "flat_spec", smooth_with_savitsky_golay: bool = True
+    ):
+        """Initialize glint corrector
+
         Keyword arguments:
         method:
-            Method for removing / correcting for sun/sky glint. 
+            Method for removing / correcting for sun/sky glint.
             Currently, only 'flat_spec' is implemented.
         smooth_with_savitsky_golay: bool
             Whether to smooth glint corrected images using a
@@ -1447,10 +1453,13 @@ class GlintCorrector:
         self.smooth_with_savitsky_golay = smooth_with_savitsky_golay
 
     @staticmethod
-    def get_nir_ind(wl, nir_band:tuple[float]=(740.0, 805.0), 
-                    nir_ignore_band:tuple[float]=(753.0, 773.0)):
-        """ Get indices of NIR band 
-        
+    def get_nir_ind(
+        wl,
+        nir_band: tuple[float] = (740.0, 805.0),
+        nir_ignore_band: tuple[float] = (753.0, 773.0),
+    ):
+        """Get indices of NIR band
+
         Keyword arguments:
         ------------------
         nir_band: tuple[float, float]
@@ -1465,16 +1474,18 @@ class GlintCorrector:
         - Default values are at relatively short wavelengths (just above visible)
         in order to generate a NIR image with high signal-no-noise level.
         The default nir_ignore_band
-        
+
         """
         nir_ind = (wl >= nir_band[0]) & (wl <= nir_band[1])
         ignore_ind = (wl >= nir_ignore_band[0]) & (wl <= nir_ignore_band[1])
         nir_ind = nir_ind & ~ignore_ind
         return nir_ind
 
-    def remove_glint_flat_spec(self, refl_image:np.ndarray, refl_wl:np.ndarray, **kwargs) -> np.ndarray:
-        """Remove sun and sky glint from image assuming flat glint spectrum 
-        
+    def remove_glint_flat_spec(
+        self, refl_image: np.ndarray, refl_wl: np.ndarray, **kwargs
+    ) -> np.ndarray:
+        """Remove sun and sky glint from image assuming flat glint spectrum
+
         Arguments:
         ----------
         refl_image:
@@ -1487,19 +1498,19 @@ class GlintCorrector:
         refl_image_glint_corr:
             Glint corrected reflectance image, same shape as refl_image.
             The mean NIR value is subtracted from each spectrum in the input
-            image. Thus, only the spectral baseline / offset is changed - 
-            the original spectral shape is maintained. 
+            image. Thus, only the spectral baseline / offset is changed -
+            the original spectral shape is maintained.
 
         Notes:
         - The glint correction is based on the assumption that there is
         (approximately) no water-leaving radiance in the NIR spectral region.
-        This is often the case, since NIR light is very effectively 
+        This is often the case, since NIR light is very effectively
         absorbed by water.
         - The glint correction also assumes that the sun and sky glint
-        reflected in the water surface has a flat spectrum, so that the 
-        glint in the visible region can be estimated from the glint in the 
+        reflected in the water surface has a flat spectrum, so that the
+        glint in the visible region can be estimated from the glint in the
         NIR region. This is usually _not_ exactly true, but the assumption
-        can be "close enough" to still produce useful results. 
+        can be "close enough" to still produce useful results.
         """
         nir_ind = self.get_nir_ind(refl_wl, **kwargs)
         nir_im = np.mean(refl_image[:, :, nir_ind], axis=2, keepdims=True)
@@ -1513,7 +1524,7 @@ class GlintCorrector:
         return refl_image_glint_corr
 
     def glint_correct_image_file(self, image_path, glint_corr_image_path, **kwargs):
-        """ Read reflectance file, apply glint correction, and save result """
+        """Read reflectance file, apply glint correction, and save result"""
         if self.method == "flat_spec":
             image, wl, metadata = read_envi(image_path)
             glint_corr_image = self.remove_glint_flat_spec(image, wl, **kwargs)
@@ -1542,14 +1553,14 @@ class ImageFlightMetadata:
 
     def __init__(
         self,
-        imu_data:dict,
-        image_shape:tuple[int],
-        camera_opening_angle:float=36.5,
-        pitch_offset:float=0.0,
-        roll_offset:float=0.0,
-        assume_square_pixels:bool=True,
-        altitude_offset:float=0.0,
-        **kwargs
+        imu_data: dict,
+        image_shape: tuple[int],
+        camera_opening_angle: float = 36.5,
+        pitch_offset: float = 0.0,
+        roll_offset: float = 0.0,
+        assume_square_pixels: bool = True,
+        altitude_offset: float = 0.0,
+        **kwargs,
     ):
         """
 
@@ -1559,7 +1570,7 @@ class ImageFlightMetadata:
             Dictionary with imu_data, as formatted by ImuDataParser
         image_shape: tuple[int]
             Shape of image, typically (n_lines,n_samples,n_bands)
-            
+
 
         Keyword arguments:
         ------------------
@@ -1573,15 +1584,15 @@ class ImageFlightMetadata:
             How much to the right ("right wing up") the camera is pointing
             relative to nadir.
         assume_square_pixels: bool
-            Whether to assume that the original image was acquired with 
+            Whether to assume that the original image was acquired with
             flight parameters (flight speed, frame rate, altitude)
-            that would produce square pixels. If true, the altitude of the 
+            that would produce square pixels. If true, the altitude of the
             camera is estimated from the shape of the image and the (along-track)
-            swath length. This can be useful in cases where absolute altitude 
-            measurement of the camera IMU is not very accurate.  
+            swath length. This can be useful in cases where absolute altitude
+            measurement of the camera IMU is not very accurate.
         altitude_offset:
             Offset added to the estimated altitude. If the UAV was higher
-            in reality than that estimated by the ImageFlightMetadata 
+            in reality than that estimated by the ImageFlightMetadata
             object, add a positive altitude_offset.
 
         """
@@ -1628,14 +1639,14 @@ class ImageFlightMetadata:
         self.image_origin = self._calc_image_origin()
 
     def _calc_time_attributes(self):
-        """ Calculate time duration and sampling interval of IMU data """
+        """Calculate time duration and sampling interval of IMU data"""
         t = np.array(self.imu_data["time"])
         dt = np.mean(np.diff(t))
         t_total = len(t) * dt
         return t_total, dt
 
     def _calc_alongtrack_properties(self):
-        """ Calculate along-track velocity, gsd, and swath length """
+        """Calculate along-track velocity, gsd, and swath length"""
         vx_alongtrack = (self.utm_x[-1] - self.utm_x[0]) / self.t_total
         vy_alongtrack = (self.utm_y[-1] - self.utm_y[0]) / self.t_total
         v_alongtrack = np.array((vx_alongtrack, vy_alongtrack))
@@ -1666,7 +1677,7 @@ class ImageFlightMetadata:
         return altitude + self.altitude_offset
 
     def _calc_crosstrack_properties(self):
-        """ Calculate cross-track unit vector, swath width and sampling distance """
+        """Calculate cross-track unit vector, swath width and sampling distance"""
         u_crosstrack = np.array(
             [-self.u_alongtrack[1], self.u_alongtrack[0]]
         )  # Rotate 90 CCW
@@ -1675,15 +1686,15 @@ class ImageFlightMetadata:
         return u_crosstrack, swath_width, gsd_crosstrack
 
     def _calc_image_origin(self):
-        """ Calculate location of image pixel (0,0) in georeferenced coordinates """
+        """Calculate location of image pixel (0,0) in georeferenced coordinates"""
         alongtrack_offset = (
             self.mean_altitude * np.tan(self.pitch_offset) * self.u_alongtrack
         )
         crosstrack_offset = (
             self.mean_altitude * np.tan(self.roll_offset) * self.u_crosstrack
         )
-        # NOTE: Signs of cross-track elements in equation below are "flipped" 
-        # because UTM coordinate system is right-handed and image coordinate 
+        # NOTE: Signs of cross-track elements in equation below are "flipped"
+        # because UTM coordinate system is right-handed and image coordinate
         # system is left-handed. If the camera_origin is in the middle of the
         # top line of the image, u_crosstrack points away from the image
         # origin (line 0, sample 0).
@@ -1723,15 +1734,15 @@ class SimpleGeoreferencer:
 
     def georeference_hyspec_save_geotiff(
         self,
-        image_path:Union[Path,str],
-        imudata_path:Union[Path,str],
-        geotiff_path:Union[Path,str],
-        rgb_only:bool=True,
-        nodata_value:int=-9999,
+        image_path: Union[Path, str],
+        imudata_path: Union[Path, str],
+        geotiff_path: Union[Path, str],
+        rgb_only: bool = True,
+        nodata_value: int = -9999,
         **kwargs,
     ):
-        """ Georeference hyperspectral image and save as GeoTIFF 
-        
+        """Georeference hyperspectral image and save as GeoTIFF
+
         Arguments:
         ----------
         image_path:
@@ -1744,7 +1755,7 @@ class SimpleGeoreferencer:
             Whether to only output an RGB version of the hyperspectral image.
             If false, the entire hyperspectral image is used. Note that
             this typically creates very large files that some programs
-            (e.g. QGIS) can struggle to read. 
+            (e.g. QGIS) can struggle to read.
         nodata_value:
             Value to insert in place of invalid pixels.
             Pixels which contain "all zeros" are considered invalid.
@@ -1761,7 +1772,7 @@ class SimpleGeoreferencer:
 
     @staticmethod
     def move_bands_axis_first(image):
-        """ Move spectral bands axis from position 2 to 0 """
+        """Move spectral bands axis from position 2 to 0"""
         return np.moveaxis(image, 2, 0)
 
     @staticmethod
@@ -1781,8 +1792,13 @@ class SimpleGeoreferencer:
         image[nodata_mask] = nodata_value
 
     @staticmethod
-    def create_geotiff_profile(image:np.ndarray, imudata_path:Union[Path,str], nodata_value:int=-9999, **kwargs):
-        """ Create profile for writing image as geotiff using rasterio
+    def create_geotiff_profile(
+        image: np.ndarray,
+        imudata_path: Union[Path, str],
+        nodata_value: int = -9999,
+        **kwargs,
+    ):
+        """Create profile for writing image as geotiff using rasterio
 
         Arguments:
         ----------
@@ -1814,9 +1830,15 @@ class SimpleGeoreferencer:
 
         return profile
 
-    def write_geotiff(self, geotiff_path:Union[Path,str], image:np.ndarray, wavelengths:np.ndarray, geotiff_profile:dict):
-        """ Write image as GeoTIFF 
-        
+    def write_geotiff(
+        self,
+        geotiff_path: Union[Path, str],
+        image: np.ndarray,
+        wavelengths: np.ndarray,
+        geotiff_profile: dict,
+    ):
+        """Write image as GeoTIFF
+
         Arguments:
         ----------
         geotiff_path: Path | str
@@ -1835,7 +1857,7 @@ class SimpleGeoreferencer:
         the spectral library is (lines, samples, bands), and this convention
         should be used consistenly to avoid bugs. This function moves the band
         axis directly before writing.
-        
+
         """
         image = self.move_bands_axis_first(image)  # Band ordering requred by GeoTIFF
         band_names = [f"{wl:.3f}" for wl in wavelengths]
@@ -1847,13 +1869,15 @@ class SimpleGeoreferencer:
                 dataset.write(image)
 
     @staticmethod
-    def update_image_file_transform(geotiff_path:Union[Path,str],imu_data_path:Union[Path,str],**kwargs):
-        """ Update the affine transform of an image 
-        
+    def update_image_file_transform(
+        geotiff_path: Union[Path, str], imu_data_path: Union[Path, str], **kwargs
+    ):
+        """Update the affine transform of an image
+
         Arguments:
         ----------
         geotiff_path:
-            Path to existing GeoTIFF file. 
+            Path to existing GeoTIFF file.
         imu_data_path:
             Path to JSON file with IMU data.
 
@@ -1862,7 +1886,7 @@ class SimpleGeoreferencer:
         **kwargs:
             Keyword arguments are passed along to create an ImageFlightMetadata object.
             Options include e.g. 'altitude_offset'. This can be useful in case
-            the shape of the existing GeoTIFF indicates that some adjustments 
+            the shape of the existing GeoTIFF indicates that some adjustments
             should be made to the image transform (which can be re-generated using
             an ImageFlightMetadata object).
 
@@ -1871,21 +1895,28 @@ class SimpleGeoreferencer:
         - https://rasterio.readthedocs.io/en/latest/api/rasterio.rio.edit_info.html
         """
         imu_data = ImuDataParser.read_imu_json_file(imu_data_path)
-        with rasterio.open(geotiff_path,'r') as dataset:
+        with rasterio.open(geotiff_path, "r") as dataset:
             im_width = dataset.width
             im_height = dataset.height
-        image_flight_meta = ImageFlightMetadata(imu_data,image_shape=(im_height,im_width),**kwargs)
+        image_flight_meta = ImageFlightMetadata(
+            imu_data, image_shape=(im_height, im_width), **kwargs
+        )
         new_transform = image_flight_meta.get_image_transform()
-        rio_cmd = ['rio','edit-info','--transform', str(list(new_transform)), str(geotiff_path)]
+        rio_cmd = [
+            "rio",
+            "edit-info",
+            "--transform",
+            str(list(new_transform)),
+            str(geotiff_path),
+        ]
         subprocess.run(rio_cmd)
-
 
 
 class PipelineProcessor:
 
     def __init__(self, dataset_dir: Union[Path, str]):
-        """ Create a pipeline for processing all data in a dataset 
-        
+        """Create a pipeline for processing all data in a dataset
+
         Arguments:
         ----------
         dataset_dir:
@@ -1893,9 +1924,9 @@ class PipelineProcessor:
             will be used as the "base name" for all processed files.
             The folder should contain at least two subfolders:
             - 0_raw: Contains all raw images as saved by Resonon airborne system.
-            - calibration: Contains Resonon calibration files for 
+            - calibration: Contains Resonon calibration files for
             camera (*.icp) and downwelling irradiance sensor (*.dcp)
-        
+
         """
         self.dataset_dir = Path(dataset_dir)
         self.dataset_base_name = dataset_dir.name
@@ -1992,23 +2023,23 @@ class PipelineProcessor:
 
     @staticmethod
     def get_image_number(raw_image_path):
-        """ Get image number from raw image
-        
+        """Get image number from raw image
+
         Notes:
         ------
         Raw files are numbered sequentially, but the numbers are not
         zero-padded. This can lead to incorrect sorting of the images, e.g.
-        ['im_1','im_2','im_10'] (simplified names for example) are sorted  
+        ['im_1','im_2','im_10'] (simplified names for example) are sorted
         ['im_1','im_10','im_2']. By extracting the numbers from filenames
         of raw files and sorting explicitly on these (as integers),
-        correct ordering can be achieved.  
+        correct ordering can be achieved.
         """
         image_file_stem = raw_image_path.name.split(".")[0]
         image_number = image_file_stem.split("_")[-1]
         return int(image_number)
 
     def _create_base_file_names(self):
-        """ Create numbered base names for processed files """
+        """Create numbered base names for processed files"""
         base_file_names = [
             f"{self.dataset_base_name}_{i:03d}"
             for i in range(len(self.raw_image_paths))
@@ -2016,7 +2047,7 @@ class PipelineProcessor:
         return base_file_names
 
     def _create_processed_file_paths(self):
-        """ Define default subfolders for processed files """
+        """Define default subfolders for processed files"""
         file_paths = {
             "radiance": [],
             "irradiance": [],
@@ -2046,7 +2077,7 @@ class PipelineProcessor:
         return file_paths
 
     def _get_raw_spectrum_paths(self):
-        """ Search for raw files matching Resonon default naming """ 
+        """Search for raw files matching Resonon default naming"""
         spec_paths = []
         for raw_image_path in self.raw_image_paths:
             spec_base_name = raw_image_path.name.split("_Pika_L")[0]
@@ -2063,7 +2094,7 @@ class PipelineProcessor:
         return spec_paths
 
     def _get_radiance_calibration_path(self):
-        """ Search for radiance calibration file (*.icp) """
+        """Search for radiance calibration file (*.icp)"""
         icp_files = list(self.calibration_dir.glob("*.icp"))
         if len(icp_files) == 1:
             return icp_files[0]
@@ -2077,7 +2108,7 @@ class PipelineProcessor:
             )
 
     def _get_irradiance_calibration_path(self):
-        """ Search for irradiance calibration file (*.dcp) """
+        """Search for irradiance calibration file (*.dcp)"""
         dcp_files = list(self.calibration_dir.glob("*.dcp"))
         if len(dcp_files) == 1:
             return dcp_files[0]
@@ -2090,8 +2121,8 @@ class PipelineProcessor:
                 f"More than one irradiance calibration file (*.dcp) found in {self.calibration_dir}"
             )
 
-    def convert_raw_images_to_radiance(self,**kwargs):
-        """ Convert raw hyperspectral images (DN) to radiance (microflicks) """
+    def convert_raw_images_to_radiance(self, **kwargs):
+        """Convert raw hyperspectral images (DN) to radiance (microflicks)"""
         logger.info("---- RADIANCE CONVERSION ----")
         self.radiance_dir.mkdir(exist_ok=True)
         radiance_converter = RadianceConverter(self.radiance_calibration_file)
@@ -2109,8 +2140,8 @@ class PipelineProcessor:
                 )
                 logger.warning("Skipping file")
 
-    def convert_raw_spectra_to_irradiance(self,**kwargs):
-        """ Convert raw spectra (DN) to irradiance (W/(m2*nm)) """
+    def convert_raw_spectra_to_irradiance(self, **kwargs):
+        """Convert raw spectra (DN) to irradiance (W/(m2*nm))"""
         logger.info("---- IRRADIANCE CONVERSION ----")
         self.radiance_dir.mkdir(exist_ok=True)
         irradiance_converter = IrradianceConverter(self.irradiance_calibration_file)
@@ -2131,8 +2162,8 @@ class PipelineProcessor:
                     )
                     logger.error("Skipping file")
 
-    def calibrate_irradiance_wavelengths(self,**kwargs):
-        """ Calibrate irradiance wavelengths using Fraunhofer absorption lines """
+    def calibrate_irradiance_wavelengths(self, **kwargs):
+        """Calibrate irradiance wavelengths using Fraunhofer absorption lines"""
         logger.info("---- IRRADIANCE WAVELENGTH CALIBRATION ----")
         if not (self.radiance_dir.exists()):
             raise FileNotFoundError(
@@ -2155,8 +2186,8 @@ class PipelineProcessor:
                     )
                     logger.error("Skipping file")
 
-    def parse_and_save_imu_data(self,**kwargs):
-        """ Parse *.lcf and *.times files with IMU data and save as JSON """
+    def parse_and_save_imu_data(self, **kwargs):
+        """Parse *.lcf and *.times files with IMU data and save as JSON"""
         logger.info("---- IMU DATA PROCESSING ----")
         self.radiance_dir.mkdir(exist_ok=True)
         imu_data_parser = ImuDataParser()
@@ -2174,11 +2205,13 @@ class PipelineProcessor:
                 )
                 logger.error("Skipping file")
 
-    def convert_radiance_images_to_reflectance(self,**kwargs):
-        """ Convert radiance images (microflicks) to reflectance (unitless) """
+    def convert_radiance_images_to_reflectance(self, **kwargs):
+        """Convert radiance images (microflicks) to reflectance (unitless)"""
         logger.info("---- REFLECTANCE CONVERSION ----")
         self.reflectance_dir.mkdir(exist_ok=True)
-        reflectance_converter = ReflectanceConverter(irrad_spec_paths=self.irrad_spec_paths)
+        reflectance_converter = ReflectanceConverter(
+            irrad_spec_paths=self.irrad_spec_paths
+        )
 
         if all([not rp.exists() for rp in self.rad_im_paths]):
             warnings.warn(f"No radiance images found in {self.radiance_dir}")
@@ -2200,8 +2233,8 @@ class PipelineProcessor:
                     )
                     logger.error("Skipping file")
 
-    def glint_correct_reflectance_images(self,**kwargs):
-        """ Correct for sun and sky glint in reflectance images """
+    def glint_correct_reflectance_images(self, **kwargs):
+        """Correct for sun and sky glint in reflectance images"""
         logger.info("---- GLINT CORRECTION ----")
         self.reflectance_gc_dir.mkdir(exist_ok=True)
         glint_corrector = GlintCorrector()
@@ -2222,7 +2255,7 @@ class PipelineProcessor:
                     logger.error("Skipping file")
 
     def georeference_glint_corrected_reflectance(self, **kwargs):
-        """ Create georeferenced GeoTIFF versions of glint corrected reflectance """
+        """Create georeferenced GeoTIFF versions of glint corrected reflectance"""
         logger.info("---- GEOREFERENCING GLINT CORRECTED REFLECTANCE ----")
         self.reflectance_gc_rgb_dir.mkdir(exist_ok=True)
         georeferencer = SimpleGeoreferencer()
@@ -2253,12 +2286,12 @@ class PipelineProcessor:
                     logger.error("Skipping file")
 
     def mosaic_geotiffs(self, mosaic_path=None):
-        """ Convert set of rotated geotiffs into single mosaic with overviews
-    
+        """Convert set of rotated geotiffs into single mosaic with overviews
+
         Arguments:
         mosaic_path
-            Path to output mosaic. If None, default dataset folder and name 
-            is used. 
+            Path to output mosaic. If None, default dataset folder and name
+            is used.
 
         # Explanation of gdalwarp arguments used:
         -overwrite:
@@ -2268,45 +2301,54 @@ class PipelineProcessor:
         -r near:
             Resampling method: Nearest neighbor
         -of GTiff:
-            Output format: GeoTiff  
+            Output format: GeoTiff
 
         # Explanation of gdaladdo agruments:
         -r average
             Use averaging when resampling to lower spatial resolution
-        -q 
+        -q
             Suppress output (be quiet)
         """
         logger.info(f"Mosaicing GeoTIFFs in {self.reflectance_gc_rgb_dir}")
         self.mosaic_dir.mkdir(exist_ok=True)
         if mosaic_path is None:
-            mosaic_path = self.mosaic_dir / (self.dataset_base_name + '_rgb.tiff')
+            mosaic_path = self.mosaic_dir / (self.dataset_base_name + "_rgb.tiff")
 
         # Run as subprocess without invoking shell. Note input file unpacking.
-        gdalwarp_args = ['gdalwarp', '-overwrite', '-q', '-r', 'near', '-of', 'GTiff', 
-                 *[str(p) for p in self.refl_gc_rgb_paths if p.exists()], str(mosaic_path)]
+        gdalwarp_args = [
+            "gdalwarp",
+            "-overwrite",
+            "-q",
+            "-r",
+            "near",
+            "-of",
+            "GTiff",
+            *[str(p) for p in self.refl_gc_rgb_paths if p.exists()],
+            str(mosaic_path),
+        ]
         subprocess.run(gdalwarp_args)
         # NOTE: Example code below runs GDAL from within shell - avoid if possible
         # geotiff_search_string = str(self.reflectance_gc_rgb_dir / '*.tiff')
         # gdalwarp_cmd = f"gdalwarp -overwrite -q -r near -of GTiff {geotiff_search_string} {mosaic_path}"
-        # subprocess.run(gdalwarp_cmd,shell=True) 
+        # subprocess.run(gdalwarp_cmd,shell=True)
 
         # Add image pyramids to file
         logger.info(f"Adding image pyramids to mosaic {mosaic_path}")
-        gdaladdo_args = ['gdaladdo', '-q', '-r', 'average', str(mosaic_path)]
+        gdaladdo_args = ["gdaladdo", "-q", "-r", "average", str(mosaic_path)]
         subprocess.run(gdaladdo_args)
 
-    def update_geotiff_transforms(self,**kwargs):
-        """ Batch update GeoTIFF transforms 
-        
+    def update_geotiff_transforms(self, **kwargs):
+        """Batch update GeoTIFF transforms
+
         Image affine transforms are re-calculated based on IMU data and
         (optional) keyword arguments.
 
         Keyword arguments:
         ------------------
         **kwargs:
-            keyword arguments accepted by ImageFlightSegment, e.g. 
-            "altitude_offset". 
-        
+            keyword arguments accepted by ImageFlightSegment, e.g.
+            "altitude_offset".
+
         """
         logger.info("---- UPDATING GEOTIFF AFFINE TRANSFORMS ----")
         georeferencer = SimpleGeoreferencer()
@@ -2318,9 +2360,7 @@ class PipelineProcessor:
             self.imu_data_paths, self.refl_gc_rgb_paths
         ):
             if imu_data_path.exists() and geotiff_path.exists():
-                logger.info(
-                    f"Updating transform for {geotiff_path.name}."
-                )
+                logger.info(f"Updating transform for {geotiff_path.name}.")
                 try:
                     georeferencer.update_image_file_transform(
                         geotiff_path,
@@ -2344,10 +2384,10 @@ class PipelineProcessor:
         glint_correct_reflectance=True,
         geotiff_from_glint_corrected_reflectance=True,
         mosaic_geotiffs=True,
-        **kwargs
+        **kwargs,
     ):
-        """ Run pipeline process(es) 
-        
+        """Run pipeline process(es)
+
         Keyword arguments:
         ------------------
         convert_raw_images_to_radiance,
@@ -2360,8 +2400,8 @@ class PipelineProcessor:
         mosaic_geotiffs: bool
             All keyword arguments are boolean "switches" used to indicate
             whether a process should be run. By default, all are True.
-            If e.g. raw images have already been processed, specify 
-            convert_raw_images_to_radiance=False to avoid reprocessing. 
+            If e.g. raw images have already been processed, specify
+            convert_raw_images_to_radiance=False to avoid reprocessing.
         """
         if convert_raw_images_to_radiance:
             try:
@@ -2389,9 +2429,7 @@ class PipelineProcessor:
             try:
                 self.parse_and_save_imu_data(**kwargs)
             except Exception as e:
-                logger.error(
-                    "Error while parsing and saving IMU data", exc_info=True
-                )                
+                logger.error("Error while parsing and saving IMU data", exc_info=True)
         if convert_radiance_to_reflectance:
             try:
                 self.convert_radiance_images_to_reflectance(**kwargs)
@@ -2406,7 +2444,7 @@ class PipelineProcessor:
             except Exception as e:
                 logger.error(
                     "Error while glint correcting reflectance images", exc_info=True
-                )           
+                )
 
         if geotiff_from_glint_corrected_reflectance:
             try:
@@ -2414,31 +2452,34 @@ class PipelineProcessor:
             except Exception as e:
                 logger.error(
                     "Error while georeferencing glint corrected images ", exc_info=True
-                )        
+                )
 
         if mosaic_geotiffs:
             try:
                 self.mosaic_geotiffs()
             except Exception as e:
-                logger.error(
-                    "Error while mosaicing geotiffs ", exc_info=True
-                )    
+                logger.error("Error while mosaicing geotiffs ", exc_info=True)
+
 
 if __name__ == "__main__":
-    """ Code to execute when running file as script.
-    Mostly used for debugging. 
+    """Code to execute when running file as script.
+    Mostly used for debugging.
     """
-    dataset_dir = Path('/media/mha114/Massimal2/seabee-minio/smola/skalmen/aerial/hsi/20230620/massimal_smola_skalmen_202306201842-se_hsi')
+    dataset_dir = Path(
+        "/media/mha114/Massimal2/seabee-minio/smola/skalmen/aerial/hsi/20230620/massimal_smola_skalmen_202306201842-se_hsi"
+    )
     pl = PipelineProcessor(dataset_dir)
-    pl.run(convert_raw_images_to_radiance=False,
-           convert_raw_spectra_to_irradiance=False,
-           calibrate_irradiance_wavelengths=False,
-           parse_imu_data=False,
-           convert_radiance_to_reflectance=False,
-           glint_correct_reflectance=False,
-           pitch_offset=2,
-           altitude_offset=18,
-           use_mean_ref_irrad_spec=True)
+    pl.run(
+        convert_raw_images_to_radiance=False,
+        convert_raw_spectra_to_irradiance=False,
+        calibrate_irradiance_wavelengths=False,
+        parse_imu_data=False,
+        convert_radiance_to_reflectance=False,
+        glint_correct_reflectance=False,
+        pitch_offset=2,
+        altitude_offset=18,
+        use_mean_ref_irrad_spec=True,
+    )
 
     # dataset_dir = Path('/media/mha114/Massimal2/seabee-minio/smola/skalmen/aerial/hsi/20230620/massimal_smola_skalmen_202306201815-se_hsi')
     # pl = PipelineProcessor(dataset_dir)
@@ -2451,16 +2492,15 @@ if __name__ == "__main__":
     #        pitch_offset=2,
     #        altitude_offset=18,
     #        use_mean_ref_irrad_spec=True)
-    
+
     # dataset_dir = Path("/media/mha114/Massimal2/seabee-minio/smola/skalmen/aerial/hsi/20230620/massimal_smola_skalmen_202306201640-nw_hsi")
     # pl = PipelineProcessor(dataset_dir)
     # pl.run(altitude_offset=-2.2, pitch_offset=3.4,)
     # pl.parse_and_save_imu_data()
     # pl.georeference_glint_corrected_reflectance()
-    
+
     # pl.update_geotiff_transforms(pitch_offset=2,altitude_offset=18) # pitch offset 3 ganske ok?
-    
-    
+
     # dataset_dir = Path(
     #     "/media/mha114/Massimal2/seabee-minio/larvik/olbergholmen/aerial/hsi/20230830/massimal_larvik_olbergholmen_202308301001-south-test_hsi"
     # )
