@@ -1225,10 +1225,38 @@ class ReflectanceConverter:
     """A class for converting images from Resonon Pika L cameras to reflectance"""
 
     def __init__(
-        self, wl_min: Union[int, float] = 400, wl_max: Union[int, float] = 930
+        self, wl_min: Union[int, float] = 400, wl_max: Union[int, float] = 930,
+        irrad_spec_paths = None
     ):
+        """
+        
+        Keyword arguments:
+        irrad_spec_paths:
+            List of paths to irradiance spectra which can be used as reference 
+            spectra when convering radiance to irradiance. 
+        
+        """
         self.wl_min = float(wl_min)
         self.wl_max = float(wl_max)
+        if irrad_spec_paths is not None:
+            irrad_spec_mean, irrad_wl, irrad_spectra = self.get_mean_irrad_spec(irrad_spec_paths)
+        else:
+            irrad_spec_mean, irrad_wl, irrad_spectra = None, None, None
+        self.ref_irrad_spec_mean = irrad_spec_mean
+        self.ref_irrad_spec_wl = irrad_wl
+        self.ref_irrad_spectra = irrad_spectra
+
+
+    @staticmethod
+    def get_mean_irrad_spec(irrad_spec_paths):
+        irrad_spectra = []
+        for irrad_spec_path in irrad_spec_paths:
+            irrad_spec, irrad_wl,_ = read_envi(irrad_spec_path)
+            irrad_spectra.append(irrad_spec.squeeze())
+        irrad_spectra = np.array(irrad_spectra)
+        irrad_spec_mean = np.mean(irrad_spectra,axis=0)
+        return irrad_spec_mean, irrad_wl, irrad_spectra
+
 
     @staticmethod
     def conv_spec_with_gaussian(spec, wl, gauss_fwhm):
@@ -1303,10 +1331,30 @@ class ReflectanceConverter:
         radiance_image_header: Union[Path, str],
         irradiance_header: Union[Path, str],
         reflectance_image_header: Union[Path, str],
+        use_mean_ref_irrad_spec: bool=False,
         **kwargs,
     ):
+        """ 
+        
+        irradiance_header:
+            Path to ENVI file containing irradiance measurement 
+            corresponding to radiance image file.
+            Not used if use_mean_ref_irrad_spec is True - in this
+            case, it can be set to None.
+
+        Keyword arguments:
+        ------------------
+        use_mean_ref_irrad_spec:
+
+        """
         rad_image, rad_wl, rad_meta = read_envi(radiance_image_header)
-        irrad_spec, irrad_wl, _ = read_envi(irradiance_header)
+        if use_mean_ref_irrad_spec:
+            if self.ref_irrad_spec_mean is None:
+                raise ValueError('Missing reference irradiance spectra.')
+            irrad_spec = self.ref_irrad_spec_mean
+            irrad_wl = self.ref_irrad_spec_wl
+        else:
+            irrad_spec, irrad_wl, _ = read_envi(irradiance_header)
         refl_im, refl_wl, _ = self.convert_radiance_image_to_reflectance(
             rad_image, rad_wl, irrad_spec, irrad_wl
         )
@@ -1898,7 +1946,7 @@ class PipelineProcessor:
     def convert_radiance_images_to_reflectance(self,**kwargs):
         logger.info("---- REFLECTANCE CONVERSION ----")
         self.reflectance_dir.mkdir(exist_ok=True)
-        reflectance_converter = ReflectanceConverter()
+        reflectance_converter = ReflectanceConverter(irrad_spec_paths=self.irrad_spec_paths)
 
         if all([not rp.exists() for rp in self.rad_im_paths]):
             warnings.warn(f"No radiance images found in {self.radiance_dir}")
@@ -1912,7 +1960,7 @@ class PipelineProcessor:
                 logger.info(f"Converting {rad_path.name} to reflectance.")
                 try:
                     reflectance_converter.convert_radiance_file_to_reflectance(
-                        rad_path, irrad_path, refl_path
+                        rad_path, irrad_path, refl_path, **kwargs
                     )
                 except Exception as e:
                     logger.error(
@@ -2114,8 +2162,18 @@ class PipelineProcessor:
                 )    
 
 if __name__ == "__main__":
-    dataset_dir = Path("/media/mha114/Massimal2/seabee-minio/smola/skalmen/aerial/hsi/20230620/massimal_smola_skalmen_202306201640-nw_hsi")
+    dataset_dir = Path('/media/mha114/Massimal2/seabee-minio/smola/skalmen/aerial/hsi/20230620/massimal_smola_skalmen_202306201815-se_hsi')
     pl = PipelineProcessor(dataset_dir)
+    pl.run(convert_raw_images_to_radiance=False,
+           convert_raw_spectra_to_irradiance=False,
+           calibrate_irradiance_wavelengths=False,
+           parse_imu_data=False,
+           pitch_offset=2,
+           altitude_offset=18,
+           use_mean_ref_irrad_spec=True)
+    
+    # dataset_dir = Path("/media/mha114/Massimal2/seabee-minio/smola/skalmen/aerial/hsi/20230620/massimal_smola_skalmen_202306201640-nw_hsi")
+    # pl = PipelineProcessor(dataset_dir)
     # pl.run(altitude_offset=-2.2, pitch_offset=3.4,)
     # pl.parse_and_save_imu_data()
     # pl.georeference_glint_corrected_reflectance()
