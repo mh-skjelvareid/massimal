@@ -1,24 +1,23 @@
 # Imports
-import spectral
-import zipfile
-import numpy as np
-from numpy.polynomial import Polynomial
-from typing import Union, Iterable
-from pathlib import Path
-from scipy.signal import savgol_filter, find_peaks
-from scipy.ndimage import gaussian_filter1d
-import warnings
-import logging
-from datetime import datetime
 import json
-import pyproj
-
-import rasterio
-from rasterio.transform import Affine
-from rasterio.profiles import DefaultGTiffProfile
-from rasterio.crs import CRS
+import logging
 import subprocess
+import warnings
+import zipfile
+from datetime import datetime
+from pathlib import Path
+from typing import Iterable, Union
 
+import numpy as np
+import pyproj
+import rasterio
+import spectral
+from numpy.polynomial import Polynomial
+from rasterio.crs import CRS
+from rasterio.profiles import DefaultGTiffProfile
+from rasterio.transform import Affine
+from scipy.ndimage import gaussian_filter1d
+from scipy.signal import find_peaks, savgol_filter
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -380,7 +379,7 @@ class RadianceCalibrationDataset:
             logger.error(
                 f"File {self.calibration_file} is not a valid ZIP file.", exc_info=True
             )
-        except Exception as e:
+        except Exception:
             logger.error(
                 f"Unexpected error when extracting calibration file {self.calibration_file}",
                 exc_info=True,
@@ -777,7 +776,6 @@ class RadianceConverter:
 
 
 class IrradianceConverter:
-
     def __init__(
         self,
         irrad_cal_file: Union[Path, str],
@@ -785,7 +783,6 @@ class IrradianceConverter:
         wl_min: Union[int, float, None] = 370,
         wl_max: Union[int, float, None] = 1000,
     ):
-
         # Save calibration file path
         self.irrad_cal_file = Path(irrad_cal_file)
         assert self.irrad_cal_file.exists()
@@ -810,7 +807,7 @@ class IrradianceConverter:
                 f"Non-empty downwelling calibration directory {self.irrad_cal_dir}"
             )
             logger.info(
-                f"Skipping unzipping of downwelling calibration file, "
+                "Skipping unzipping of downwelling calibration file, "
                 "assuming unzipping already done."
             )
             return
@@ -914,7 +911,6 @@ class IrradianceConverter:
 
 
 class WavelengthCalibrator:
-
     def __init__(self):
         self._fh_line_indices = None
         self._fh_wavelengths = None
@@ -1082,7 +1078,7 @@ class WavelengthCalibrator:
             spectrum_path = Path(spectrum_path)
             try:
                 spec, wl, _ = read_envi(spectrum_path)
-            except OSError as error:
+            except OSError:
                 logger.warning(f"Error opening spectrum {spectrum_path}", exc_info=True)
                 logger.warning("Skipping spectrum.")
             spectra.append(np.squeeze(spec))
@@ -1434,7 +1430,6 @@ class ReflectanceConverter:
 
 
 class GlintCorrector:
-
     def __init__(
         self, method: str = "flat_spec", smooth_with_savitsky_golay: bool = True
     ):
@@ -1731,7 +1726,6 @@ class ImageFlightMetadata:
 
 
 class SimpleGeoreferencer:
-
     def georeference_hyspec_save_geotiff(
         self,
         image_path: Union[Path, str],
@@ -1913,7 +1907,6 @@ class SimpleGeoreferencer:
 
 
 class PipelineProcessor:
-
     def __init__(self, dataset_dir: Union[Path, str]):
         """Create a pipeline for processing all data in a dataset
 
@@ -2156,7 +2149,7 @@ class PipelineProcessor:
                     irradiance_converter.convert_raw_file_to_irradiance(
                         raw_spec_path, irrad_spec_path
                     )
-                except Exception as e:
+                except Exception:
                     logger.error(
                         f"Error occured while processing {raw_spec_path}", exc_info=True
                     )
@@ -2179,7 +2172,7 @@ class PipelineProcessor:
                     wavelength_calibrator.update_header_wavelengths(
                         irradiance_spec_path
                     )
-                except Exception as e:
+                except Exception:
                     logger.error(
                         f"Error occured while processing {irradiance_spec_path}",
                         exc_info=True,
@@ -2199,7 +2192,7 @@ class PipelineProcessor:
                 imu_data_parser.read_and_save_imu_data(
                     lcf_path, times_path, imu_data_path
                 )
-            except Exception as e:
+            except Exception:
                 logger.error(
                     f"Error occured while processing {lcf_path}", exc_info=True
                 )
@@ -2278,7 +2271,7 @@ class PipelineProcessor:
                         rgb_only=True,
                         **kwargs,
                     )
-                except Exception as e:
+                except Exception:
                     logger.error(
                         f"Error occured while georeferencing RGB version of {refl_gc_path}",
                         exc_info=True,
@@ -2367,7 +2360,7 @@ class PipelineProcessor:
                         imu_data_path,
                         **kwargs,
                     )
-                except Exception as e:
+                except Exception:
                     logger.error(
                         f"Error occured while updating transform for {geotiff_path}",
                         exc_info=True,
@@ -2406,21 +2399,21 @@ class PipelineProcessor:
         if convert_raw_images_to_radiance:
             try:
                 self.convert_raw_images_to_radiance(**kwargs)
-            except Exception as e:
+            except Exception:
                 logger.error(
                     "Error while converting raw images to radiance", exc_info=True
                 )
         if convert_raw_spectra_to_irradiance:
             try:
                 self.convert_raw_spectra_to_irradiance(**kwargs)
-            except Exception as e:
+            except Exception:
                 logger.error(
                     "Error while converting raw spectra to irradiance", exc_info=True
                 )
         if calibrate_irradiance_wavelengths:
             try:
                 self.calibrate_irradiance_wavelengths(**kwargs)
-            except Exception as e:
+            except Exception:
                 logger.error(
                     "Error while calibrating irradiance wavelengths", exc_info=True
                 )
@@ -2428,12 +2421,12 @@ class PipelineProcessor:
         if parse_imu_data:
             try:
                 self.parse_and_save_imu_data(**kwargs)
-            except Exception as e:
+            except Exception:
                 logger.error("Error while parsing and saving IMU data", exc_info=True)
         if convert_radiance_to_reflectance:
             try:
                 self.convert_radiance_images_to_reflectance(**kwargs)
-            except Exception as e:
+            except Exception:
                 logger.error(
                     "Error while converting from radiance to reflectance", exc_info=True
                 )
@@ -2441,7 +2434,7 @@ class PipelineProcessor:
         if glint_correct_reflectance:
             try:
                 self.glint_correct_reflectance_images(**kwargs)
-            except Exception as e:
+            except Exception:
                 logger.error(
                     "Error while glint correcting reflectance images", exc_info=True
                 )
@@ -2449,7 +2442,7 @@ class PipelineProcessor:
         if geotiff_from_glint_corrected_reflectance:
             try:
                 self.georeference_glint_corrected_reflectance(**kwargs)
-            except Exception as e:
+            except Exception:
                 logger.error(
                     "Error while georeferencing glint corrected images ", exc_info=True
                 )
@@ -2457,7 +2450,7 @@ class PipelineProcessor:
         if mosaic_geotiffs:
             try:
                 self.mosaic_geotiffs()
-            except Exception as e:
+            except Exception:
                 logger.error("Error while mosaicing geotiffs ", exc_info=True)
 
 
