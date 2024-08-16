@@ -1,0 +1,26 @@
+
+rsync --info=progress2 -a <local folder to copy> mha114@login.nird.sigma2.no:/nird/datapeak/NS11030K/massimal/<folder on nird>
+
+# Create a directory with all "missing" parent directories, use -p. Example:
+ssh mha114@login.nird.sigma2.no
+cd /nird/projects/NS11030K/
+mkdir -p seabee-minio/larvik/olbergholmen/aerial/hsi/20230830/massimal_larvik_olbergholmen_202308301228-south-test_hsi
+
+
+
+# Copy test dataset
+rsync --info=progress2 -a /media/mha114/Massimal2/seabee-minio/larvik/olbergholmen/aerial/hsi/20230830/massimal_larvik_olbergholmen_202308301228-south-test_hsi/ mha114@login.nird.sigma2.no:/nird/projects/NS11030K/seabee-minio/larvik/olbergholmen/aerial/hsi/20230830/massimal_larvik_olbergholmen_202308301228-south-test_hsi
+
+# VSCode - navigate to project root
+/nird/projects/NS11030K/
+
+# Example for testing selective copying (-a: archive (recursive++), -m: don't copy empty directories / create empty directories at destination (don't create directories for all the excluded files), -v: verbose, -i: itemize changes (good for seeing how filtering works), -n: dry run, --info=progress2: total progress)
+rsync -amvin --info=progress2 --include='*/' --include='goodfolder/***' --exclude='*' /media/mha114/Massimal2/seabee-minio/test/ mha114@login.nird.sigma2.no:/nird/projects/NS11030K/seabee-minio/test/
+
+# General template for copying raw files (-a: archive (recursive++), -m: don't copy empty directories / create empty directories at destination (don't create directories for all the excluded files), --info=progress2: total progress )
+rsync -am --info=progress2 --include='*/' --include='0_raw/***' --include='calibration/***' --include='notes/***' --exclude='*' /media/mha114/Massimal2/seabee-minio/ mha114@login.nird.sigma2.no:/nird/projects/NS11030K/seabee-minio/
+
+
+
+
+
