@@ -87,7 +87,7 @@ def read_envi(
 
             try:
                 im_handle = spectral.io.envi.open(header_path, image_path)
-            except Exception as e:
+            except Exception:
                 logger.error(
                     f"Unsucessful when reading modified header file {header_path}",
                     exc_info=True,
@@ -819,7 +819,7 @@ class IrradianceConverter:
             logger.error(
                 f"File {self.irrad_cal_file} is not a valid ZIP file.", exc_info=True
             )
-        except Exception as e:
+        except Exception:
             logger.error(
                 f"Error while extracting downwelling calibration file {self.irrad_cal_file}",
                 exc_info=True,
@@ -2127,7 +2127,7 @@ class PipelineProcessor:
                 radiance_converter.convert_raw_file_to_radiance(
                     raw_image_path, radiance_image_path
                 )
-            except Exception as e:
+            except Exception:
                 logger.warning(
                     f"Error occured while processing {raw_image_path}", exc_info=True
                 )
@@ -2220,7 +2220,7 @@ class PipelineProcessor:
                     reflectance_converter.convert_radiance_file_to_reflectance(
                         rad_path, irrad_path, refl_path, **kwargs
                     )
-                except Exception as e:
+                except Exception:
                     logger.error(
                         f"Error occured while processing {rad_path}", exc_info=True
                     )
@@ -2240,7 +2240,7 @@ class PipelineProcessor:
                 logger.info(f"Applying glint correction to {refl_path.name}.")
                 try:
                     glint_corrector.glint_correct_image_file(refl_path, refl_gc_path)
-                except Exception as e:
+                except Exception:
                     logger.error(
                         f"Error occured while glint correcting {refl_path}",
                         exc_info=True,
