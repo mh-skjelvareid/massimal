@@ -58,12 +58,13 @@ L0 corresponds to all the data collected during UAV flights. This includes:
 
 Calibration files for the PikaL hyperspectral camera and the Flame downwelling irradiance spectrometer are also included. These are used for calculation of radiance and reflectance.
 
+### L0b: Quicklook
+Percentile stretched RGB versions of raw images. 
+
 ### L1a: Radiance
 L1 images have been converted to radiance by calibration in the Resonon software, using the camera calibration file. This includes subtraction of "dark current" (check). Pixels that were saturated during image aquisition are set to zero for all bands. 
 
 The data has the same file structure as L0, but also includes a "world file" (*.wld) with an affine transformation to georeference the image. The target coordinate system is UTM/WGS84. The UTM zone corresponds to the "local" UTM zone for the data (32N or 33N). 
-
-The data also includes a "quick look" RGB representation of each image (*.png). Each image is contrast stretched using a 2%/98% percentile stretch, applied independently for each band. (wavelengths to be decided?)
 
 
 ### L2a: Reflectance (ENVI, not published?)
@@ -85,6 +86,10 @@ Limited to range [400,730] nm. There is almost no radiance above 730 nm due to w
 Pixels with mostly negative spectra are set to zero (masked out). 
 
 Spectra are also smoothed using S-G filtering, and also binned/downsampled (?). The final result is saved as a GeoTIFF(?)
+
+
+### Mosaics
+RGB versions of images are mosaiced together into a single GeoTIFF. 
 
 
 ### Summary
@@ -131,7 +136,7 @@ Files have so far not been organized according to flight. This could be done man
 
 Need to rename both radiance and reflectance files using same naming convention. Water leaving reflectance can be created based on reflectance files.
 
-## Massimal data folder structure
+## Massimal data folder structure (needs update)
 
 Note: Python module (treelib)[https://treelib.readthedocs.io/en/latest/] or (anytree)[https://anytree.readthedocs.io/en/latest/]could be useful for representing the structure.
 
@@ -252,6 +257,37 @@ To do:
 - (Re)process ground images for geotagging
 - Merge multispectral single band images into multiband images(?)
 
+## Hyperspectral folder structure
+    ├───0_raw
+    ├───0b_quicklook
+    ├───1a_radiance
+    │   └───rgb
+    ├───1b_radiance_sgc
+    │   └───rgb
+    ├───2a_reflectance
+    │   └───rgb
+    ├───2b_reflectance_sgc
+    │   └───rgb
+    ├───calibration
+    ├───imudata
+    ├───mosaics
+    └───notes
+
+## Logic for determining which data products are created
+- radiance: If option set
+- radiance_sgc: If radiance exists and option set and sgc "training cube" given
+- reflectance: If radiance exists and option set
+- reflectance_sgc: If reflectance / radiance_sgc exists (see below) and option set
+- mosaic (all versions): If option set
+
+
+Possible to calculate SGC version of reflectance in multiple ways:
+1. Using SGC version of radiance (lin. reg.), if present
+2. Using "flat spec" SGC method on reflectance 
+3. Using lin. reg. SGC method on reflectance (equvivalent to 1?). Requires training cube
+-> Need for practical experience with these to determine if all should be possible or if one is superior
+
+
 ## Notes on multispectral images
 Ølbergholmen: Images taken with Micasense Altum camera. Not sure of the exact serial number for the camera. The bands given below are for serial number AL04 or lower.
 Blue (475nm ±20nm), Green (560nm ±20nm), Red (668nm ±10nm), Red Edge (717nm ±10nm), NIR (840nm ±40nm), Thermal (11 μm ± 6 μm)
@@ -259,3 +295,4 @@ Blue (475nm ±20nm), Green (560nm ±20nm), Red (668nm ±10nm), Red Edge (717nm �
 
 ## GCPs
 - Check out [GCPEditorPro](https://github.com/uav4geo/GCPEditorPro)
+
