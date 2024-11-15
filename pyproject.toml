@@ -12,7 +12,7 @@ dependencies = [
   "matplotlib",
   "numpy<2.0",
   "scipy",
-  "protobuf==3.20"
+  "protobuf==3.20",
   "tensorflow==2.8.0",
   "scikit-learn",
   "scikit-learn-intelex",
@@ -22,7 +22,9 @@ dependencies = [
   "spectral",
   "tqdm",
   "h5py",
-  "geopandas"
+  "geopandas",
+  "rasterio",
+  "pyyaml"
 ]
 
 requires-python = ">=3.8"

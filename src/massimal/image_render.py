@@ -30,26 +30,22 @@ def percentile_stretch(image,percentiles=(2,98),separate_bands=True, ignore_zero
 
     Returns:
     im_rescaled:    Image linearly "stretched" between percentile values.
+                    Data type float, values stretched to range (0,1)
+
 
     The function uses skimage.exposure.rescale_intensity() for rescaling.
     See https://scikit-image.org/docs/stable/api/skimage.exposure.html
     """
 
-    # Preallocate output array
-    im_rescaled = np.zeros_like(image)
-    
-    # Determine output range / dtype
-    if np.issubdtype(image.dtype,np.integer):
-        out_range = 'dtype'
-    else:
-        out_range = (0,1)  # Float
+    # Preallocate output array, use float for standard (0,1) intensity range
+    im_rescaled = np.zeros_like(image,dtype=float)
+    out_range = (0,1)
 
-    # Create mask indicating non-zero and non-NaN pixels
+    # Create mask indicating non-zero pixels
     if ignore_zeros:
         mask = ~np.all(image==0,axis=2)
     else:
         mask = np.ones(image.shape[:-1],dtype=bool)
-    #mask &= ~np.any(np.isnan(image),axis=2)
 
     # Case: Stretch bands separately
     if separate_bands:
