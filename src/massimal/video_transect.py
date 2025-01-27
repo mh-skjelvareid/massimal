@@ -14,6 +14,9 @@ import shutil
 # Suppress "future" warnings (issue with shapely / geopandas)
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
+# Note: Also check out batch geotegging of images
+# https://help.propelleraero.com/hc/en-us/articles/19384091245719-How-to-Batch-Geotag-Photos-with-ExifTool
+
 def image_from_video(video_input_file,image_output_file, time, image_quality=5, overwrite=True):
     """ Extract image from video at given time
 
