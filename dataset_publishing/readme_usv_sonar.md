@@ -39,8 +39,8 @@ Additional information about the project can be found on the following websites:
 An ["Otter"](https://www.maritimerobotics.com/otter) USV manufactured by Marine Robotics
 (Trondheim, Norway) and owned by the [SeaBee](https://seabee.no/) research
 infrastructure was used for data collection. The USV was usually operated in
-"auto-pilot" mode, navigating using pre-planned waypoints, but it occationally had to
-be piloted manually - typically in very shallow areas.  
+"auto-pilot" mode, navigating using pre-planned waypoints, but it occasionally had to
+be piloted manually, typically in very shallow areas.  
 
 ## Sonar equipment
 The sonar used to collect this dataset is a [BioSonics MX Aquatic Habitat Echo

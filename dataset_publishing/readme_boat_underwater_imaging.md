@@ -1,8 +1,8 @@
-# Massimal underwater imaging dataset (USV)
-This file is a description of a dataset with geotagged underwater images collected by an
-unmanned surface vehicle (USV). The description is general and not connected to one
+# Massimal underwater imaging dataset (boat)
+This file is a description of a dataset with geotagged underwater images collected from
+a boat. The description is general and not connected to one
 specific location or dataset. The remainder of the file describes the research project
-that collected the data, the USV and camera equipment used, and the image geotagging
+that collected the data, the camera equipment used, and the image geotagging
 process.
 
 ## The MASSIMAL research project 
@@ -37,31 +37,28 @@ Additional information about the project can be found on the following websites:
   data](https://geonode.seabee.sigma2.no/catalogue/#/search?q=massimal&f=dataset)
 
 
-## Unmanned surface vehicle (USV)
-An ["Otter"](https://www.maritimerobotics.com/otter) USV manufactured by Marine Robotics
-(Trondheim, Norway) and owned by the [SeaBee](https://seabee.no/) research
-infrastructure was used for data collection. The USV was usually operated in
-"auto-pilot" mode, navigating using pre-planned waypoints, but it occasionally had to be
-piloted manually - typically in very shallow areas.  
-
-The USV uses RTK GNSS for high-precision measurement of its position. The logs were
-originally in NMEA format, but were processed and saved in CSV format by NIVA. Position
-was sampled at approximately 10 Hertz.  
-
 ## Underwater imaging
-A GoPro camera (model [Hero 10 Black](https://en.wikipedia.org/wiki/GoPro#HERO10)) was
-mounted on the USV inside a watertight casing. The camera was placed just below the
-water surface, close to the stern, pointing downwards. The camera perspective was the
-same as if sitting at the stern of a manned boat and looking downwards into the water
-while the boat moves forwards.  
+A GoPro camera (model [Hero 8 Black](https://en.wikipedia.org/wiki/GoPro#HERO8)) was
+used for underwater imaging. The camera was used with its watertight casing, and was
+mounted to a wooden pole using a GoPro "Large Tube Mount". The pole was then lowered
+into the water along the side of the boat, with the camera either pointing directly
+downwards or slightly forwards. The pole was long enough to manually adjust the camera
+depth approx. 1-2 meters, allowing the camera operator to place the camera closer to the
+seafloor (for better visibility) in deeper waters.  
 
-For most datasets, the camera recorded videos, which were later used to extract images
-at specific times in the video. However, for some datasets in the Smøla area, the camera
-was used in "time lapse" mode, automatically taking an image every half second. 
+## Trimble Catalyst GNSS system
+The position of the camera was measured using a [Trimble
+Catalyst](https://geospatial.trimble.com/en/products/software/trimble-catalyst) GNSS
+system; a lightweight GNSS receiver connected to a mobile phone. The Catalyst system has
+a subscription-based system with multiple levels of accuracy, and the highest accuracy
+(approx 1 cm) was used during field work. However, the GNSS receiver could not be placed
+directly above the camera, and the actual accuracy of geotagging is probably approx. 1
+meter. 
 
-The camera battery lasted approximately one hour while recording. Two cameras were used
-to enable semi-continuous recording; about every hour, the USV would be steered towards
-the "ground station", and the cameras would be switched. 
+The Trimble Catalyst position data was logged using the Android app [Ultra GPS
+Logger](https://play.google.com/store/apps/details?id=com.flashlight.ultra.gps.logger)
+using a "professional" subscription (for high-accuracy logging). The log was exported to
+a CSV file. 
 
 ## Time synchronization
 [GoPro Labs](https://github.com/gopro/labs) offers a firmware update that enables
