@@ -1,8 +1,8 @@
-# Massimal ground imaging dataset (walking)
-This file is a description of a dataset with geotagged images from the intertidal zone
-collected by walking. The description is general and not connected to one specific
-location or dataset. The remainder of the file describes the research project that
-collected the data, the camera equipment used, and the image geotagging process.
+# Massimal dropcam imaging dataset (boat)
+This file is a description of a dataset with underwater video and geotagged images
+collected by towing a camera from a boat. The remainder of the file describes the
+research project that collected the data, the camera equipment used, and the image
+geotagging process.
 
 ## The MASSIMAL research project 
 This dataset was collected as part of the "MASSIMAL" project (Mapping of Algae and
@@ -36,46 +36,42 @@ Additional information about the project can be found on the following websites:
   data](https://geonode.seabee.sigma2.no/catalogue/#/search?q=massimal&f=dataset)
 
 
-## Ground imaging
+## Underwater imaging
 A GoPro camera (model [Hero 8 Black](https://en.wikipedia.org/wiki/GoPro#HERO8)) was
-used for imaging. The camera was used with a watertight casing, and was mounted to a
-wooden pole using a GoPro ["Large Tube
-Mount"](https://gopro.com/en/is/shop/mounts-accessories/large-tube-mount/AGTLM-001.html).
-The camera pointed downwards and slightly forwards so that the end of the pole was in
-view. The ground was imaged by recording video while walking around in the intertidal
-zone. The walking path did not follow any pre-planned "transect", but was conducted by
-walking around inside a target area, while monitoring what part of the area had already
-been covered. 
+used for underwater imaging. The camera was attached by a "drop camera" using a GoPro
+["Jaws" clamp](https://gopro.com/en/no/shop/mounts-accessories/jaws/ACMPM-001.html). The
+drop camera was a camera custom-built by NIVA, enabling live streaming of video via a
+cable to a monitor in the boat. It was possible to record video with the drop camera,
+but the video quality was very poor, and a GoPro camera was therefore used for
+recording. However, the live drop camera feed was very useful for adjusting the depth of
+the camera, keeping it at 1-3 meters above the sea floor. 
 
-## Trimble Catalyst GNSS system
-The position of the camera was measured using a [Trimble
-Catalyst](https://geospatial.trimble.com/en/products/software/trimble-catalyst) GNSS
-system; a lightweight GNSS receiver connected to a mobile phone. The Catalyst system has
-a subscription-based system with multiple levels of accuracy, and the highest accuracy
-(approx 1 cm) was used during field work. The GNSS receiver was placed directly above
-the camera, and the accuracy of the camera position is therefore relatively high.
+The camera was towed at approximately 0.5 m/s (1 knot). 
 
-The Trimble Catalyst position data was logged using the Android app [Ultra GPS
-Logger](https://play.google.com/store/apps/details?id=com.flashlight.ultra.gps.logger)
-using a "professional" subscription (for high-accuracy logging). The log was exported to
-a CSV file. 
+## Position logging
+Position was logged using a mobile phone with the ["Skippo"](https://www.skippo.no/)
+app, an app for marine navigation. The start and end positions of video recording were
+marked with waypoints. The position log was exported as a CSV file. 
+
+Note that the position log represents the position of the boat and not the camera. Since
+the camera was towed, it was generally a few meters behind the boat, but this offset is
+not consistent. The accuracy of the position is estimated to approximately 10 meters. 
 
 ## Time synchronization
-The time logged by the GNSS system and the camera was synchronized by starting the
-camera recording and the position logging simultaneously. Note, however, that there may
-be up to 1-2 seconds time offset between these, due to slight delays in the startup of
-the recording process. We estimate that this translates to a systematic position error
-of approx. 1 meter (depending on the direction and speed of walking).
-   
+Unfortunately, the clock on the camera and the clock on the mobile phone used for
+position logging were not synchronized. However, the marking of waypoints at the start
+of each transect corresponded to the start of the video recording. This information was
+used to add appropriate time offsets when geotagging. Note, however, that there may be a
+few seconds delay between the two, which translates to a small error in position when
+geotagging.     
 
 ## Image geotagging
 The geotagged images in the dataset were extracted using an early version of the
 **vidtransgeotag** Python module (see [GitHub
 ](https://github.com/mh-skjelvareid/vidtransgeotag) and
 [10.5281/zenodo.14974704](https://doi.org/10.5281/zenodo.14974704)). The software is
-written in Python, but uses the [FFMPEG](https://www.ffmpeg.org/) library (via
-[ffmpeg-python](https://github.com/kkroening/ffmpeg-python)) to read metadata and
-extract images from video. 
+written in Python, but uses the [FFMPEG](https://www.ffmpeg.org/) library (via [ffmpeg-python](https://github.com/kkroening/ffmpeg-python)) to read metadata and extract images from
+video. 
 
 The input to the geotagging process is two data streams: A video file and a CSV file
 with positions. By using the time stamps in both data streams, it is possible to

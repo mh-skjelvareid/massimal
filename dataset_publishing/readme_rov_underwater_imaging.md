@@ -1,10 +1,9 @@
 # Massimal sonar dataset
 This file is a description of a dataset with video of the seafloor collected using a
-remoted operated vehicle (ROV). The dataset was collected in 2022 in a location close to
-the island of Vega in Norway, as part of a research project. Even though the research
-project spanned multiple locations and research campaigns, the ROV was only once. The
-remainder of the file describes the research project, the ROV used, and details
-regarding the transects that the ROV covered.
+remotely operated vehicle (ROV). The dataset was collected in 2022 close to the island
+of Vega in Norway, as part of a research project.  The remainder of the file describes
+the research project, the ROV used, and details regarding the transects that the ROV
+covered.
 
 ## The MASSIMAL research project 
 This dataset was collected as part of the "MASSIMAL" project (Mapping of Algae and
@@ -43,12 +42,13 @@ manufactured by Qysea and owned by [SeaBee](https://seabee.no/). The ROV has a 4
 camera, and depth, temperature and date information is overlayed directly on the video
 image.   
 
-## Transect end point position measurement
 The ROV was placed in the water from a boat, was piloted down to the seafloor, and drove
 in (more or less) a straight line along the seafloor, for as far as practically
-possible. The ROV was then piloted back to the surface and picked up. The start and end
-points were measured with a handheld GPS device, resulting in a positional accuracy of a
-few meters. 
+possible. The ROV was then piloted back to the surface and picked up. 
+
+## Transect end point position measurement
+The start and end points of transects were measured with a handheld GPS device,
+resulting in a positional accuracy of a few meters. 
 
 In some locations the ROV followed a pre-placed transect marked by a rope or measuring
-tape, but in most locations not transect markers were used. 
+tape, but in most locations, transect markers were not used. 

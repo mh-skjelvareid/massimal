@@ -67,16 +67,24 @@ the "ground station", and the cameras would be switched.
 [GoPro Labs](https://github.com/gopro/labs) offers a firmware update that enables
 updating of the internal GoPro clock by simply pointing the camera at a [QR
 code](https://gopro.github.io/labs/control/precisiontime/). This method was used before
-collection of almost all datasets, to enable high-accuracy time synchronization between the
-camera and the position log. In cases where this method was not used, the time
+collection of almost all datasets, to enable high-accuracy time synchronization between
+the camera and the position log. In cases where this method was not used, the time
 offset between the camera and the USV was estimated by trial-and-error; geotagging
-images, looking for well-known landmarks in the images, and checking if the landmarked
+images, looking for well-known landmarks in the images, and checking if the landmark
 images were geotagged correctly. If not, the time offset was adjusted and the process
 repeated.    
 
 ## Image geotagging
+The geotagged images in the dataset were extracted using an early version of the
+**vidtransgeotag** Python module (see [GitHub
+](https://github.com/mh-skjelvareid/vidtransgeotag) and
+[10.5281/zenodo.14974704](https://doi.org/10.5281/zenodo.14974704)). The software is
+written in Python, but uses the [FFMPEG](https://www.ffmpeg.org/) library (via
+[ffmpeg-python](https://github.com/kkroening/ffmpeg-python)) to read metadata and
+extract images from video. 
+
 The input to the geotagging process is two data streams: A video file and a CSV file
-with positions. By using the time stamps in the both data streams, it is possible to
+with positions. By using the time stamps in both data streams, it is possible to
 calculate which position points overlap in time with the video, and what exact time in
 the video each of these points correspond to. It is then possible to extract images from
 the video at these times and link them with the position information.
@@ -93,30 +101,25 @@ extracting images. The pseudocode for the filtering algorithm is as follows:
             add position to filtered positions
             set last_included_position = position
 
-The geotagged images in the dataset were extracted using an early version of the
-**vidtransgeotag** Python module (see [GitHub
-](https://github.com/mh-skjelvareid/vidtransgeotag) and
-[10.5281/zenodo.14974704](https://doi.org/10.5281/zenodo.14974704)). The software is
-written in Python, but uses the [FFMPEG](https://www.ffmpeg.org/) library (via [ffmpeg-python](https://github.com/kkroening/ffmpeg-python)) to read metadata and extract images from
-video. 
 
 ## Underwater image quality
-The depth and quality of the water between the camera and the seafloor has a very
-significant effect on the image quality: In very shallow areas, about 1-2 meters, the
-image is crisp and clear, while at larger depths, the image becomes green-tinted and
+The quality of the water and the distance between between the camera and the seafloor
+has a very significant effect on the image quality: At distances about 1-2 meters, the
+image is crisp and clear, while at larger distances the image becomes green-tinted and
 more blurry. Even if the camera was set to automatic color balancing, it could not fully
 compensate for the green tint. 
 
-For many of the datasets, an algorithm for color balancing and contrast stretching has
-been applied to the images. The algorithm is very simple:
+For many of the datasets, an [histogram
+normalization](https://en.wikipedia.org/wiki/Normalization_(image_processing)) algorithm
+for color balancing and contrast stretching has been applied to the images:
 
 - for every color band in the image:
-    - calculate intensity percentile values representing lower and upper edge of pixel
-      intensity distribution (usually 1% and 99%)
-    - "stretch" the image band so that the range between percentile values spans the full
-      dynamic range of the image (0-255 for 8-bit images) 
+    - calculate intensity percentile values representing the lower and upper edges of
+      the pixel intensity distribution (usually 1st and 99th percentile)
+    - "stretch" the image band so that the range between percentile values spans the
+      full dynamic range of the image (0-255 for 8-bit images) 
 
 This algorithm often results in less green tint and a more visually pleasing image.
-Note, however, that for images where the contrast in the original image is very low (i.e.
-at large water depths), the algorithm can result in "extreme" contrast and odd-looking
-images. 
+Note, however, that for images where the contrast in the original image is very low
+(i.e. at large water depths), the algorithm can result in "extreme" contrast and
+odd-looking images. 

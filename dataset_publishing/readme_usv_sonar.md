@@ -40,19 +40,20 @@ An ["Otter"](https://www.maritimerobotics.com/otter) USV manufactured by Marine 
 (Trondheim, Norway) and owned by the [SeaBee](https://seabee.no/) research
 infrastructure was used for data collection. The USV was usually operated in
 "auto-pilot" mode, navigating using pre-planned waypoints, but it occasionally had to
-be piloted manually, typically in very shallow areas.  
+be piloted manually (typically in very shallow areas).  
 
 ## Sonar equipment
 The sonar used to collect this dataset is a [BioSonics MX Aquatic Habitat Echo
 Sounder](https://www.biosonicsinc.com/products/mx-aquatic-habitat-echosounder/) owned by
-[SeaBee](https://seabee.no/), "Norwegian infrastructure for drone-based research,
-mapping monitoring in the coastal zone". 
+[SeaBee](https://seabee.no/). The sonar is specifically designed for acquiring
+information related to submerged aquatic vegetation and seafloor substrates, in
+addition to bathymetry ("single-beam").
 
 ## Raw data
 Raw data for a single dataset is saved as a collection of files with the following
 format: `<yyyymmdd_HHMMSS>_mx.rtpx`, where `yyyymmdd_HHMMSS` corresponds to the date and
 time when the data was recorded. Each file contains up to approximately 4500 pings,
-corresponding to approximately 56 MB of data. The files also contain metadata about the
+corresponding to 56 MB of data. The files also contain metadata about the
 position of each ping and the type of transducer. 
 
 Raw data files can be opened using the software [Visual
@@ -68,23 +69,28 @@ Aquatic software (version
 - Submerged plant coverage and height estimation
 - Bottom echo feature extraction and bottom type clustering 
 
+Note that there are multiple adjustable processing parameters. To fine-tune the
+processing, open the raw files in Visual Aquatic, and iteratively adjust the parameters
+and re-process the data.
+
 ## Processed data
 Processed data is exported as a CSV file. Each row in the file corresponds to a "report"
-which is calculated based on a small collection of consecutive sonar "pings" (typically 5). The with the following fields:
-- **Latitude_deg**: Latitude in decimal degrees
-- **Longitude_deg**: Longitude in decimal degrees
+which is calculated based on a small collection of consecutive sonar "pings" (typically
+5). The CSV file has the following columns:
+- **Latitude_deg**: Latitude in decimal degrees.
+- **Longitude_deg**: Longitude in decimal degrees.
 - **GPSQuality**: Text string describing GPS quality (accuracy), e.g. "Differential".
 - **Altitude_mReMsl**: Altitude of GPS antenna (in meters) relative to mean sea level.
-- **AltitudeQuality**: Altitude quality of GPS fix, 1 is valid, 0 is invalid
-- **Time**: Date and exact time of report
-- **FileName**: Name of raw data file containing pings in report
-- **Transducer name**: Description of transducer (always "204,8 kHz 8,8° Single") in this
-  dataset.
-- **Transducer number**: Always 1 in this dataset.Used to identify transducers when multiple
+- **AltitudeQuality**: Altitude quality of GPS fix, 1 is valid, 0 is invalid.
+- **Time**: Date and exact time of report.
+- **FileName**: Name of raw data file containing pings in report.
+- **Transducer name**: Description of transducer (always "204,8 kHz 8,8° Single" in this
+  dataset).
+- **Transducer number**: Always 1 in this dataset. Used to identify transducers when multiple
   transducers are used in a pinging sequence.  
 - **ReportNumber**: Numbering of reports, starting at 1 and increasing by 1 for each line. 
-- **FirstPingNumber**: Number of first ping included in report
-- **LastPingNumber**: Number of last ping included in report
+- **FirstPingNumber**: Number of first ping included in report.
+- **LastPingNumber**: Number of last ping included in report.
 - **BottomStatus**: Either "Valid" or "Invalid". If "Valid", the bottom has been detected in
   the data and the "BottomElevation_m" field has a valid number.
 - **BottomElevation_m**: Depth (in meters) given as a negative elevation (0 at surface,
@@ -108,20 +114,18 @@ field work, differences between low and high tide can be up to 3 meters.
 
 The Norwegian Mapping Authority provides a [web service ("Se
 Havnivå")](https://kartverket.no/en/at-sea/se-havniva) and an
-[API](https://vannstand.kartverket.no/tideapi_en.html) for retrieving sea level data
-for Norway. We recommend combining this data with the "BottomElevation_m" column to
-calculate water depth relative to mean sea level. 
+[API](https://vannstand.kartverket.no/tideapi_en.html) for retrieving sea level data for
+Norway, for any date and location in Norway. We recommend combining this data with the
+"BottomElevation_m" column to calculate water depth relative to mean sea level. 
 
 
 ### Notes on bottom type clustering
 The bottom echo is "clustered", i.e. classified as belonging to a unlabelled "bottom
 type", by using the [fuzzy c-means clustering
-  algorithm](https://en.wikipedia.org/wiki/Fuzzy_clustering#Fuzzy_C-means_clustering)
-
-The basis for clustering is 15 features extracted from the bottom echo: "Fractal
-dimension, E1, E1’, and 12 spectral moments", according to the Visual Aquatic
-documentation. The features are [z-score
-normalized](https://en.wikipedia.org/wiki/Standard_score), and
+algorithm](https://en.wikipedia.org/wiki/Fuzzy_clustering#Fuzzy_C-means_clustering). The
+basis for clustering is 15 features extracted from the bottom echo. According to the
+Visual Aquatic documentation, "Fractal dimension, E1, E1’, and 12 spectral moments". The
+features are [z-score normalized](https://en.wikipedia.org/wiki/Standard_score), and
 [PCA](https://en.wikipedia.org/wiki/Principal_component_analysis) is performed on the
 normalized features. The 6 first principal components are kept, and these components are
 the inputs used for fuzzy c-means clustering.
@@ -129,9 +133,10 @@ the inputs used for fuzzy c-means clustering.
 The number of clusters is an adjustable input parameter, and can be changed if the
 clustering is rerun in Visual Aquatic (from raw data).
 
-Clustering is an unsupervised method, and the cluster number (e.g. 1-4) is arbitrary.
-The clusters are learned from the dataset, and change from one dataset to the next.
-Bottom types and cluster memberships are thus not comparable across datasets.   
+Clustering is an unsupervised method, and the number identifying a specific cluster
+(e.g. 2 out of 1-4 possible) is arbitrary chosen by the algorithm. The clusters are
+learned from the dataset, and change from one dataset to the next. Bottom types and
+cluster memberships are thus not comparable across datasets.   
 
 
 

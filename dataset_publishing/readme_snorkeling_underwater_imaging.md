@@ -1,6 +1,6 @@
 # Massimal seafloor imaging dataset (snorkeling)
 This file is a description of a dataset with images and/or video of the seafloor in
-shallow areas, recorded while snorkeling in the water surface along pre-planned transects. The description is general and not connected to one specific location or
+shallow waters, recorded while snorkeling in the water surface along pre-planned transects. The description is general and not connected to one specific location or
 dataset. The remainder of the file describes the research project that collected the
 data, the method used for making transects, and the method for imaging while snorkeling.
 
@@ -40,10 +40,9 @@ Defined transects were marked on the seafloor before imaging. Straight transect 
 were marked using thin white polyester rope, or fiberglass measuring tape. The ends of
 the transect were fastened with bamboo poles hammered into the sand, or with polyester
 shopping bags filled with stones. Most transects had markers along them at every 5 or 10
-meters, for example black markings on the rope or rubber disks fastened with plastic
-strips. These were "milestones" to determine the relative position along the transect.
-In some cases these markings are also visible in drone images taken from above the
-water.   
+meters, for example black markings on the rope, or rubber disks fastened to the rope.
+These were "milestones" to determine the relative position along the transect. In some
+cases these markings are also visible in drone images taken from above the water.   
 
 ## Transect end point position measurement
 The end points of transects in the intertidal zone or in very shallow water was measured using
@@ -59,7 +58,7 @@ The accuracy of this method is on the order of a few meters.
 
 ## Underwater imaging while snorkeling
 A number of different cameras were used to image the seafloor while snorkeling. In
-datasets from Juvika and Sandsund close to Bodø, a (**fill in camera model**) was used.
+datasets from Juvika and Sandsund close to Bodø, a Sony α7R IV was used.
 The camera was operated handheld, close to the water surface. In datasets from Larvik
 and Vega, a GoPro camera was used. The camera was mounted to a wooden pole, 1-4 meters
 long, using a GoPro "Large Tube Mount". The pole enabled the camera operator to lower
