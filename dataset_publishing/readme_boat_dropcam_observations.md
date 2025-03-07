@@ -1,7 +1,7 @@
 # Massimal dropcam observations dataset (boat)
-This file is a description of a dataset with underwater video and geotagged images
-collected by towing a camera from a boat. The remainder of the file describes the
-research project that collected the data, the camera equipment used, and the data format.
+This file is a description of a dataset with seafloor observations collected by using a
+"dropcam" camera from a boat. The remainder of the file describes the research project
+that collected the data, the camera equipment used, and the data format.
 
 ## The MASSIMAL research project 
 This dataset was collected as part of the "MASSIMAL" project (Mapping of Algae and
