@@ -1,5 +1,5 @@
 # Annotations of Massimal hyperspectral images
-This files describes a dataset of image annotations for hyperspectral images of coastal
+This file describes a dataset of image annotations for hyperspectral images of coastal
 areas collected using a UAV (drone). This is not an independent dataset - the original
 hyperspectral images are required to really make use of the annotations, and these have
 to be downloaded separately. The description in this file is also general, and not
@@ -62,7 +62,7 @@ images 900 pixels wide (across-track). The height of each image is 2000 pixels o
 ## Ground truth
 Various types of ground truth, i.e., direct observations of the ground or seafloor, were
 used in the annotation process. These included: 
-- Geotagged images, aquired either from a boat, an unmanned surface vehicle (USV), or
+- Geotagged images, acquired either from a boat, an unmanned surface vehicle (USV), or
   while walking (in the intertidal zone).
 - Images and video from transects, acquired using a handheld camera while snorkeling, a
   camera towed behind a boat, or using an ROV. The position and shape of the transect
@@ -95,7 +95,7 @@ The Massimal project collected two types of images using UAVs:
 - **Color images (RGB)**: Collected using small consumer drones (DJI Phantom 4 or
   DJI Mavic 2 Pro). These images have much less spectral information than the hyperspectral
   images, but the image collection method is faster and can cover a large area in a
-  short amount of time. Acquring images also allow the use of photogrammetry software
+  short amount of time. Acquiring images also allow the use of photogrammetry software
   such as [Pix4d](https://www.pix4d.com) or
   [OpenDroneMap](https://www.opendronemap.org), which accurately merge the images into a
   large mosaic. Using a few accurately measured ground control points also enables
@@ -285,4 +285,4 @@ is based on the COCO format, and adds some additional metadata.
 Both formats define the annotation masks directly in the JSON file using [run-length
 encoding](https://en.wikipedia.org/wiki/Run-length_encoding) (RLE). Getting a boolean
 mask defining a class thus requires decoding the RLE (code examples are available via
-the links to the COCO and Hasty formats).  
+the links to the COCO and Hasty formats).
