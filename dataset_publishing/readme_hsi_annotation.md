@@ -86,7 +86,7 @@ collected in the Massimal project. Only a subset of images was annotated because
   for annotation in the project.  
 
 ## Remote sensing images
-The Massimal project collected two types of images using UAVs:
+The Massimal project mainly collected two types of images using UAVs:
 - **Hyperspectral images**: Images with 300 spectral channels, collected using a
   push-broom imager. An IMU was used to continuously measure the camera position and
   orientation, enabling georeferencing of the images. However, the heading and altitude
