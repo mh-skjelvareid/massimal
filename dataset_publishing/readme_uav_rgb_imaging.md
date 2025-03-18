@@ -55,7 +55,7 @@ these UAVs.
 
 ## Photogrammetry software
 Many datasets were initially processed using [Pix4D](https://www.pix4d.com/). During the
-Massimal project period the SeaBee [data processing
+Massimal project period the [SeaBee data processing
 pipeline](https://seabee-no.github.io/documentation/) was also established, opening the
 possibility to process the images using [OpenDroneMap](https://www.opendronemap.org/)
 (ODM), an open-source alternative to Pix4D. Some datasets have been processed only with
@@ -63,7 +63,7 @@ Pix4D or ODM, and some have been processed with both.
 
 For datasets processed with ODM, the original images are included, as well as the output
 products of the processing. For datasets processed with Pix4D, the processing outputs
-(at least the orthomosaic) is included, but the original images are not included. Open
+(at least the orthomosaic) are included, but the original images are not included. Open
 the report under the `report` subfolder to determine which method was used for a
 specific dataset.  
 
@@ -81,7 +81,7 @@ A typical dataset is organized as follows:
     └── config.seabee.yaml
 
 Note that not all folders are present in every dataset. The following describes the
-contents of each folder in the dataset. 
+contents of each folder. 
 
 ### DEM (digital elevation model)
 The `dem` folder contains digital surface models (DSM) and digital terrain models (DTM,

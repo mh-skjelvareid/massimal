@@ -50,8 +50,8 @@ available during the writing of this readme file, but most relevant information 
 contained in the metadata of the images. 
 
 ### Datasets from Larvik (Ølbergholmen)
-Multispectral imaging was performed by Medyan Ghareeb from NIVA, as part of the
-[SeaBee](https://seabee.no/) research infrastructure project. A [MicaSense
+Multispectral imaging was performed by NIVA, as part of the [SeaBee](https://seabee.no/)
+research infrastructure project. A [MicaSense
 Altum](https://support.micasense.com/hc/en-us/articles/360010025413-Altum-Integration-Guide)
 camera and a [DJI Matrice
 210](https://www.dji.com/no/support/product/matrice-200-series) UAV was used for
@@ -92,9 +92,9 @@ wavelength band. These bands are:
 
 ## Photogrammetry software
 Two different photogrammetry programs were used,
-[OpenDroneMap](https://www.opendronemap.org/) and [Pix4D](https://www.pix4d.com/). You
-can determine which was used for your specific dataset by e.g. reading the report under
-the `report` subfolder.  
+[OpenDroneMap](https://www.opendronemap.org/) and [Pix4D](https://www.pix4d.com/). Open
+the report under the `report` subfolder to determine which was used for a specific
+dataset.  
 
 All the images acquired were processed using OpenDroneMap, as implemented in the SeaBee
 [data processing pipeline](https://seabee-no.github.io/documentation/). Some datasets
@@ -146,6 +146,9 @@ Portal](https://geonode.seabee.sigma2.no/).
 Note that for Pix4D data, the original mosaic is saved using floating-point numbers and
 has units of reflectance (see [Pix4D note on reflectance
 maps](https://support.pix4d.com/hc/en-us/articles/202739409)). 
+
+The ODM orthomosaic has been color balanced to produce a visually pleasing orthomosaic.
+The colors do not directly represent radiance or reflectance.
 
 ### Other
 The `other` folder contains additional or non-standard files, added as part of the
