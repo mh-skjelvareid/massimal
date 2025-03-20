@@ -63,8 +63,8 @@ Pix4D or ODM, and some have been processed with both.
 
 For datasets processed with ODM, the original images are included, as well as the output
 products of the processing. For datasets processed with Pix4D, the processing outputs
-(at least the orthomosaic) are included, but the original images are not included. Open
-the report under the `report` subfolder to determine which method was used for a
+(at least the orthomosaic) are included, but the original images are often not included.
+Open the report under the `report` subfolder to determine which method was used for a
 specific dataset.  
 
 Details regarding software settings were unfortunately not available during the writing
@@ -106,8 +106,8 @@ or Pix4D. The other GeoTiffs are versions used for publishing the data on the [S
 Geo-Visualization Portal](https://geonode.seabee.sigma2.no/).
 
 Note that the images have been color balanced to produce a visually pleasing
-orthomosaic. The colors do not directly represent radiance or reflectance
-(see [Pix4D article on reflectance map vs
+orthomosaic. The colors do not directly represent radiance or reflectance (see [Pix4D
+article on reflectance map vs
 orthomosaic](https://support.pix4d.com/hc/en-us/articles/202739409)).  
 
 ### Other
