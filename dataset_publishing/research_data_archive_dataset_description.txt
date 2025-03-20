@@ -1,0 +1,73 @@
+MASSIMAL: A multimodal dataset for coastal habitat mapping in Norway
+
+The MASSIMAL dataset was collected as part of the "MASSIMAL" project (Mapping of Algae
+and Seagrass using Spectral Imaging and Machine Learning). The main goal of the project
+was development methods for shallow-water coastal habitat mapping based on hyperspectral
+imaging. The most important part of the dataset is approximately 900 hyperspectral
+images collected using a UAV (unmanned aerial vehicle, or "drone") at 4 different
+locations along the Norwegian coast. The dataset also includes multiple other types of
+data; multispectral and RGB images collected from UAVs, sonar data, and underwater
+images of the seabed. Some of the hyperspectral images have been annotated to enable
+training of machine learning models, and the annotations are included in the dataset.  
+
+The project was conducted in the period 2020-2024, and data collection and field work
+was performed at various locations along the Norwegian coast in the period 2021-2023.
+The project was financed by the Norwegian Research Council (8 MNOK) and by UiT the
+Arctic University of Norway (600 kNOK), and was a collaboration between UiT the Arctic
+University of Norway, Norwegian Institute for Water Research and Nord
+University. 
+
+The dataset is organized as a set of ZIP archive files, where each ZIP file corresponds
+to a single set of data collected at a specific time and location. The ZIP files follow
+the naming pattern
+
+    massimal_<area>_<location>_<datetime[optional tag]>_<data type>.zip
+
+An example could be
+
+    massimal_vega_sola_202208231608-coast3_hsi.zip
+
+This dataset was collected in the Vega area, close the the small island of Søla, on the
+date 2022-08-23, at time 16:08. The dataset also has the additional tag "coast3". The
+dataset contains hyperspectral images (HSI).
+
+The dataset was collected during field campaigns in four areas along the Norwegian
+coast; close to Bodø (67.2N, 15.0E), Larvik (59.0N, 10.1E), Smøla (63.4N, 7.8E) and Vega
+(65.7N, 11.7E). These areas were chosen to represent multiple habitats of interest (e.g.
+seagrass meadows, kelp forests, maerl beds) and to span large variations in environmental
+parameters (e.g. wave exposure and water temperature). Multiple smaller locations were
+covered within each main area. 
+
+The following "modes" of data are included in the dataset:
+- hsi: Hyperspectral images collected with UAV
+- msi: Multispectral images collected with UAV
+- rgb: Color images (red, green, blue) collected with UAV
+- usv: Underwater images and sonar data collected using a unmanned surface vehicle (USV)
+- boat: Underwater images and/or written observations collected from a boat
+- snorkel: Underwater images collected while snorkeling in the water surface
+- rov: Underwater images collected using an ROV (remotely operated vehicle)
+- walk: Images from the intertidal zone collected while walking
+- annotation: Annotations of hyperspectral images (class "masks" for semantic
+segmentation) 
+
+The names used above are the same that are used in the zip file names.
+
+Hyperspectral imaging was performed using an "Airborne Remote Sensing System"
+manufactured by Resonon. The system included a Pika-L hyperspectral camera, an IMU
+measuring camera position and orientation, and a spectrometer measuring downwelling
+irradiance. A DJI MAtrice 600 Pro (UAV/drone) with a DJI Ronin-MX 3-axis gimbal was used
+as the camera platform. The hyperspectral camera has 300 spectral channels covering the
+a spectral range of 400-1000 nm. The camera is a push-broom sensor with 900 spatial
+pixels and 36.5 degrees field of view. The camera frame rate and the UAV altitude and
+speed were set to yield a ground sampling distance of approximately 3.5 cm, both along-
+and across-track. 
+
+The hyperspectral images are saved in the "ENVI" file format, with a large binary file
+containing the image pixel values and a small "header" file containing metadata. The
+images have all been post-processed and converted to units of spectral radiance, and the
+metadata contains map information for georeferencing each image. Where available, the
+metadata also contains measurements of spectral downwelling irradiance, which enables
+conversion of radiance values into reflectance. 
+
+Further details about the imaging system and data format are available in the readme.md
+file included with each dataset.  
