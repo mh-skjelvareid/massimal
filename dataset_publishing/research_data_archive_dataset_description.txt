@@ -1,5 +1,6 @@
-MASSIMAL: A multimodal dataset for coastal habitat mapping in Norway
+# MASSIMAL: A multimodal dataset for coastal habitat mapping in Norway
 
+## Introduction
 The MASSIMAL dataset was collected as part of the "MASSIMAL" project (Mapping of Algae
 and Seagrass using Spectral Imaging and Machine Learning). The main goal of the project
 was development methods for shallow-water coastal habitat mapping based on hyperspectral
@@ -10,6 +11,7 @@ data; multispectral and RGB images collected from UAVs, sonar data, and underwat
 images of the seabed. Some of the hyperspectral images have been annotated to enable
 training of machine learning models, and the annotations are included in the dataset.  
 
+## The MASSIMAL Research project 
 The project was conducted in the period 2020-2024, and data collection and field work
 was performed at various locations along the Norwegian coast in the period 2021-2023.
 The project was financed by the Norwegian Research Council (8 MNOK) and by UiT the
@@ -17,20 +19,7 @@ Arctic University of Norway (600 kNOK), and was a collaboration between UiT the 
 University of Norway, Norwegian Institute for Water Research and Nord
 University. 
 
-The dataset is organized as a set of ZIP archive files, where each ZIP file corresponds
-to a single set of data collected at a specific time and location. The ZIP files follow
-the naming pattern
-
-    massimal_<area>_<location>_<datetime[optional tag]>_<data type>.zip
-
-An example could be
-
-    massimal_vega_sola_202208231608-coast3_hsi.zip
-
-This dataset was collected in the Vega area, close the the small island of Søla, on the
-date 2022-08-23, at time 16:08. The dataset also has the additional tag "coast3". The
-dataset contains hyperspectral images (HSI).
-
+## Research campaign locations
 The dataset was collected during field campaigns in four areas along the Norwegian
 coast; close to Bodø (67.2N, 15.0E), Larvik (59.0N, 10.1E), Smøla (63.4N, 7.8E) and Vega
 (65.7N, 11.7E). These areas were chosen to represent multiple habitats of interest (e.g.
@@ -38,7 +27,25 @@ seagrass meadows, kelp forests, maerl beds) and to span large variations in envi
 parameters (e.g. wave exposure and water temperature). Multiple smaller locations were
 covered within each main area. 
 
-The following "modes" of data are included in the dataset:
+## Dataset file format and naming
+The dataset is organized as a set of ZIP archive files, where each ZIP file corresponds
+to a single set of data collected at a specific time and location. The ZIP files follow
+the following naming pattern:
+
+    massimal_<area>_<location>_<datetime[optional tag]>_<data type>.zip
+
+A concrete example:
+
+    massimal_vega_sola_202208231608-coast3_hsi.zip
+
+This dataset was collected in the Vega area, close the the small island of Søla, on the
+date 2022-08-23, at time 16:08. The dataset also has the additional tag "coast3". The
+dataset contains hyperspectral images (HSI).
+
+## Dataset modalities
+The following list describes the types of data are included in the dataset. The names
+used are the same that are used for data type in the zip file names.
+
 - hsi: Hyperspectral images collected with UAV
 - msi: Multispectral images collected with UAV
 - rgb: Color images (red, green, blue) collected with UAV
@@ -50,7 +57,13 @@ The following "modes" of data are included in the dataset:
 - annotation: Annotations of hyperspectral images (class "masks" for semantic
 segmentation) 
 
-The names used above are the same that are used in the zip file names.
+Every type of dataset has a readme file included, which describes the data collection
+methodology and dataset format in more detail. 
+
+
+## Details on hyperspectral images 
+Since hyperspectral data was the main focus of the MASSIMAL project, some additional
+information about the methodology and data format is included here.
 
 Hyperspectral imaging was performed using an "Airborne Remote Sensing System"
 manufactured by Resonon. The system included a Pika-L hyperspectral camera, an IMU
@@ -71,3 +84,28 @@ conversion of radiance values into reflectance.
 
 Further details about the imaging system and data format are available in the readme.md
 file included with each dataset.  
+
+## Details on annotations of hyperspectral images
+A subset of the hyperspectral images have been annotated. The annotation datasets
+contain all annotations for hyperspectral images collected on the same date and
+location, which in some cases encompasses multiple hyperspectral datasets. For example,
+"massimal_vega_sola_20220823_hsi_annotation.zip" contains annotations from all 7
+hyperspectral datasets collected on August 23. 2022. 
+
+Annotations are formatted as pixel "masks", defined in the same pixel coordinate system
+as the hyperspectral images. The annotations are not georeferenced, but georeferencing
+can be achieved by copying the geotransform from the corresponding hyperspectral image.
+
+The annotations were made in the online annotations tool "Hasty", and were exported in
+three different formats:
+- Colored PNG images + JSON file defining the classes and their color coding
+- JSON file in COCO format
+- JSON file in "Hasty" format (similar to COCO, but includes some additional metadata.)
+
+The annotation classes are organized in a hierarchy with general habitat types (e.g.
+"algae", "substrate") at the top, and more specific habitats (e.g. "kelp" or "Laminaria
+hyperborea") as subclasses of the general types. The annotation tool did support
+hierarchical classes, and all classes are therefore defined in a "flat" structure in
+the JSON files. However, the hierarchy is defined in the readme file included with the
+dataset, and can be used to group annotations as needed. 
+
