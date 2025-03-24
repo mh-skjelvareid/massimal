@@ -11,6 +11,10 @@ included in the dataset. Potential applications of the dataset include developme
 mapping methods for coastal habitats based, education on coastal monitoring methods, and
 reference material for timeline studies.
 
+This "readme" file gives a short and general introduction to the dataset. More detailed
+readme files describing the methodology and data formatting for each data type also are
+available as part of the dataset. 
+
 
 ## The MASSIMAL Research project 
 The MASSIMAL dataset was collected as part of the MASSIMAL project (Mapping of Algae and
@@ -29,9 +33,17 @@ water temperature). Multiple smaller locations were covered within each main are
 
 The project was financed by the Norwegian Research Council (8 MNOK, project num. 301317)
 and by UiT the Arctic University of Norway (600 kNOK), and was a collaboration between
-UiT the Arctic University of Norway, Norwegian Institute for Water Research and Nord
-University. Additional information can be found on the project page in the Cristin
-research database: https://app.cristin.no/projects/show.jsf?id=2054355 
+UiT the Arctic University of Norway, the Norwegian Institute for Water Research, and Nord
+University. 
+
+Additional information about the project can be found on the following websites:
+- [UiT project page](https://en.uit.no/project/massimal)
+- [Cristin research database project
+  page](https://app.cristin.no/projects/show.jsf?id=2054355)
+- [Norwegian Research Council project
+  page](https://prosjektbanken.forskningsradet.no/project/FORISS/301317)
+- [SeaBee data portal with MASSIMAL
+  data](https://geonode.seabee.sigma2.no/catalogue/#/search?q=massimal&f=dataset)
 
 
 ## Dataset modalities
@@ -72,11 +84,11 @@ dataset contains hyperspectral images (HSI).
 ## Potential uses for the dataset
 The original purpose of the dataset was to develop methods for mapping coastal habitat
 types using optical remote sensing. This development was started during the project, but
-there are many uses of the data that have not yet been explored. For example, the
-hyperspectral, multispectral and/or RGB images could be used as training data in
-large-scale machine learning models for coastal mapping. The high-resolution
-hyperspectral images can also be used to simulate the images from sensors with lower
-spectral or spatial resolution, e.g. satellite sensors.
+there are many possible uses of the data to explore. For example, the hyperspectral,
+multispectral and/or RGB images could be used as training data in large-scale machine
+learning models for coastal mapping. The high-resolution hyperspectral images can also
+be used to simulate the images from sensors with lower spectral or spatial resolution,
+e.g. satellite sensors.
 
 The multi-modal nature of the dataset enables exploration of how different sensors can
 complement each other. For example, images from UAVs and sonar data from USVs can

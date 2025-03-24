@@ -1,0 +1,18 @@
+Short description of Massimal dataset published on NIRD Research data archive
+
+(The short description field does not support headings, spaces etc. A very short
+description is given here, with a more detailed description given in a separate readme
+MarkDown file.)
+
+The MASSIMAL dataset contains data from shallow coastal areas collected using multiple
+data modalities, such as hyperspectral and multispectral aerial imaging, underwater
+imaging, and sonar measurements. The dataset was collected at four main locations along
+the Norwegian coast, in the time period 2021-2023, spanning large variations in habitat
+types. The data is organized as a set of ZIP files, with each file corresponding to one
+single time, location, and data type. Annotations of hyperspectral images are also
+included in the dataset. Potential applications of the dataset include development of
+mapping methods for coastal habitats based, education on coastal monitoring methods, and
+reference material for timeline studies. See the massimal_dataset_readme.md for a more
+comprehensive introduction to the dataset, and
+massimal_detailed_readme_every_modality.zip for a collection of readme files for every
+data modality.
