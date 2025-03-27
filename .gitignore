@@ -117,4 +117,5 @@ dmypy.json
 prelim/
 dataset_specific/20220630_Juvika/model.png
 dataset_specific/massimal_datasets_to_do.md
+dataset_specific/20220825_Vega_Sola/GeoHab_2024_Poster/geohab_2024_train_unet_v2/development
 massimal.code-workspace
