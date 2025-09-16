@@ -1,0 +1,85 @@
+grouping: null                            # General identifier linking this flight to related flights
+area: null                                # Name of specific location
+datetime: null                            # Format 'yyyymmddHHMM' (must be text string)
+nfiles: null                              # Number of raw hyperspectral files
+organisation: UiT
+mosaic: true
+classify: false
+publish: false
+theme: Habitat
+spectrum_type: HSI
+creator_name: Martin H. Skjelvareid
+project: Massimal
+massipipe_options:
+  general: 
+    rgb_wl: null
+  quicklook:
+    create: true
+    overwrite: false
+    percentiles: null
+  imu_data:
+    create: true
+    overwrite: true
+  geotransform:
+    create: true
+    overwrite: true
+    camera_opening_angle_deg: null
+    pitch_offset_deg: null
+    roll_offset_deg: null
+    altitude_offset_m: null
+    utm_x_offset_m: null
+    utm_y_offset_m: null
+    assume_square_pixels: true
+  radiance:
+    create: true
+    overwrite: false
+    set_saturated_pixels_to_zero: true
+    add_map_info: true
+    add_irradiance_to_header: true
+  radiance_rgb:
+    create: true
+    overwrite: false
+  radiance_gc:
+    create: true
+    overwrite: false
+    smooth_spectra: false
+    subtract_dark_spec: true
+    set_negative_values_to_zero: true
+    reference_image_numbers: null
+    reference_image_ranges: null
+  radiance_gc_rgb:
+    create: true
+    overwrite: false
+  irradiance:
+    create: true
+    overwrite: false 
+  reflectance:
+    create: true
+    overwrite: false 
+    wl_min: null
+    wl_max: null
+    conv_irrad_with_gauss: true
+    fwhm_irrad_smooth: null
+    smooth_spectra: false
+    add_map_info: true
+    refl_from_mean_irrad: false
+  reflectance_gc: 
+    create: true
+    overwrite: false
+    smooth_spectra: true
+    wl_min: null
+    wl_max: null
+  reflectance_gc_rgb:
+    create: true
+    overwrite: false
+  mosaic:
+    overview_factors: null
+    radiance_rgb:
+      create: true
+      overwrite: true
+    radiance_gc_rgb: 
+      create: true
+      overwrite: true
+    reflectance_gc_rgb:
+      create: true
+      overwrite: true

@@ -1,0 +1,4 @@
+bodo
+    juvika
+        20210418_07m
+            - Kjørt "manuelt", bredde på swath varierer mye, lurt å bruke "assume_square_pixels=false"
